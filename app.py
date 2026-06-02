@@ -8,7 +8,7 @@ st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide")
 
 st.markdown("""
 <style>
-    /* 💡 UI 개선: 빈 공간 삭제 및 화면 꽉 채우기 */
+    /* 여백 삭제 및 화면 꽉 채우기 */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
@@ -17,10 +17,10 @@ st.markdown("""
         max-width: 100% !important;
     }
     header[data-testid="stHeader"] {
-        display: none !important; /* 상단 불필요한 기본 헤더 공간 삭제 */
+        display: none !important;
     }
 
-    /* 💡 UI 개선: 탭 상단 고정 (Sticky) */
+    /* 탭 상단 고정 (스크롤 시에도 위에 붙어있음) */
     div[data-testid="stTabs"] {
         position: sticky !important;
         top: 0px !important;
@@ -148,6 +148,7 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=400):
                     for idx, item in enumerate(ents):
+                        # 💡 핵심 수정: 에러 원인인 중복 키(Key) 발생을 막기 위해 idx 강제 주입
                         if st.button(f"📄 {item['title']}", key=f"btn_ent_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
@@ -161,7 +162,7 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=450):
                     for idx, item in enumerate(itms):
-                        if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}"):
+                        if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -174,7 +175,7 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=450):
                     for idx, item in enumerate(ops):
-                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}"):
+                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -204,7 +205,7 @@ if st.session_state.doc:
             st.session_state.rendered_page = st.session_state.current_page
         st.image(st.session_state.rendered_img, use_container_width=True)
 
-        # [하단] 네비게이션 신설
+        # [하단] 네비게이션
         st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
         nc1_bot, nc2_bot, nc3_bot = st.columns([1, 2, 1])
         with nc1_bot:
