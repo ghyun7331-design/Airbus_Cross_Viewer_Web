@@ -8,6 +8,28 @@ st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide")
 
 st.markdown("""
 <style>
+    /* 💡 UI 개선 1: 불필요한 여백 삭제 및 화면 꽉 채우기 */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        max-width: 100% !important;
+    }
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
+
+    /* 💡 UI 개선 2: 탭을 상단에 딱 고정 (틀 고정) */
+    div[data-testid="stTabs"] {
+        position: sticky !important;
+        top: 0px !important;
+        z-index: 9999 !important;
+        background-color: #1A2639 !important; 
+        padding-top: 5px !important;
+        padding-bottom: 5px !important;
+    }
+
     .stApp { background-color: #1A2639; color: #E2E8F0; }
     .stTabs [data-baseweb="tab-list"] { background-color: #24344D; }
     .stTabs [data-baseweb="tab"] { color: #E2E8F0; }
@@ -29,7 +51,7 @@ st.markdown("""
         color: #00D2FF !important;
     }
 
-    /* 삼성 탭 등 모바일 환경에서 네비게이션 버튼이 3줄로 깨지는 현상 방지 (1줄 강제 고정) */
+    /* 네비게이션 버튼 1줄 강제 고정 */
     .nav-anchor + div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
         align-items: center !important;
@@ -44,13 +66,17 @@ st.markdown("""
 
 st.title("✈️ MEL SEARCH")
 
-# --- 세션 상태 ---
+# --- 세션 상태 (화면 전환을 위한 step 변수 추가) ---
 if 'doc' not in st.session_state: st.session_state.doc = None
 if 'toc_items' not in st.session_state: st.session_state.toc_items = []
 if 'current_page' not in st.session_state: st.session_state.current_page = 0
 if 'chapters' not in st.session_state: st.session_state.chapters = []
 if 'rendered_page' not in st.session_state: st.session_state.rendered_page = -1
 if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
+
+# 💡 1페이지/2페이지 전환을 기억하는 변수
+if 't1_step' not in st.session_state: st.session_state.t1_step = 1 
+if 't1_selected_ch' not in st.session_state: st.session_state.t1_selected_ch = "선택하세요"
 
 def clean(t): return str(t).replace("-", "").replace(" ", "").lower()
 
@@ -109,24 +135,38 @@ if st.session_state.doc:
     with col_l:
         t1, t2, t3 = st.tabs(["🔍 MEL Entries", "🔍 MEL Items", "🔍 Operational Proc."])
         
-        # --- MEL Entries ---
+        # --- 💡 MEL Entries (1페이지 / 2페이지 화면 전환 방식) ---
         with t1:
-            st.write("▼ **챕터를 선택하면 하위 항목이 나열됩니다.**")
-            
-            # 💡 사진 1, 2번과 동일한 오리지널 콤보박스 형태로 복구 완료
-            sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
-            
-            s1 = st.text_input("결과 내 검색", key="s1")
-            
-            if sel_ch != "선택하세요":
-                ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == sel_ch and i['title'] != sel_ch]
+            if st.session_state.t1_step == 1:
+                # [1페이지] 챕터 선택 화면
+                st.write("▼ **챕터를 선택하면 결과 화면으로 이동합니다.**")
+                sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
+                
+                # 선택하는 순간 2페이지로 상태 변경
+                if sel_ch != "선택하세요":
+                    st.session_state.t1_selected_ch = sel_ch
+                    st.session_state.t1_step = 2
+                    st.rerun()
+                    
+            elif st.session_state.t1_step == 2:
+                # [2페이지] 결과 화면
+                if st.button("◀ 챕터 다시 선택하기 (뒤로 가기)", use_container_width=True):
+                    st.session_state.t1_step = 1
+                    st.session_state.t1_selected_ch = "선택하세요"
+                    st.rerun()
+                
+                st.markdown(f"**현재 Chapter: {st.session_state.t1_selected_ch}**")
+                s1 = st.text_input("결과 내 검색", key="s1")
+                
+                ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == st.session_state.t1_selected_ch and i['title'] != st.session_state.t1_selected_ch]
                 
                 if clean(s1):
                     ents = [i for i in ents if clean(s1) in clean(i['title'])]
                 
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-                with st.container(height=400):
+                with st.container(height=500):
                     for idx, item in enumerate(ents):
+                        # 에러 차단을 위해 고유 키(idx) 할당
                         if st.button(f"📄 {item['title']}", key=f"btn_ent_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
@@ -140,7 +180,7 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=450):
                     for idx, item in enumerate(itms):
-                        if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}"):
+                        if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -153,7 +193,7 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=450):
                     for idx, item in enumerate(ops):
-                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}"):
+                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -183,7 +223,7 @@ if st.session_state.doc:
             st.session_state.rendered_page = st.session_state.current_page
         st.image(st.session_state.rendered_img, use_container_width=True)
 
-        # [하단] 네비게이션 신설
+        # [하단] 네비게이션
         st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
         nc1_bot, nc2_bot, nc3_bot = st.columns([1, 2, 1])
         with nc1_bot:
