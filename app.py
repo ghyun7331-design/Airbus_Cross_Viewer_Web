@@ -4,32 +4,10 @@ from PIL import Image
 import re
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide")
 
 st.markdown("""
 <style>
-    /* 여백 최소화하여 화면 꽉 채우기 */
-    .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-        max-width: 100% !important;
-    }
-    header[data-testid="stHeader"] {
-        display: none !important;
-    }
-
-    /* 탭 상단 고정 */
-    div[data-testid="stTabs"] {
-        position: sticky !important;
-        top: 0px !important;
-        z-index: 9999 !important;
-        background-color: #1A2639 !important; 
-        padding-top: 5px !important;
-        padding-bottom: 5px !important;
-    }
-
     .stApp { background-color: #1A2639; color: #E2E8F0; }
     .stTabs [data-baseweb="tab-list"] { background-color: #24344D; }
     .stTabs [data-baseweb="tab"] { color: #E2E8F0; }
@@ -51,7 +29,7 @@ st.markdown("""
         color: #00D2FF !important;
     }
 
-    /* 네비게이션 버튼 1줄 강제 고정 */
+    /* 삼성 탭 등 모바일 환경에서 네비게이션 버튼이 3줄로 깨지는 현상 방지 (1줄 강제 고정) */
     .nav-anchor + div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
         align-items: center !important;
@@ -101,8 +79,7 @@ with st.sidebar:
             is_itm = any("mel items" in path[l].lower() for l in path)
             is_ops = any("mel operational procedures" in path[l].lower() for l in path)
             
-            # 💡 수정: PDF 내부 목차의 전체 이름("21 Air Conditioning")을 정확히 가져오도록 개선
-            if is_ent and level == 2 and re.match(r'^\d{2}\b', title):
+            if is_ent and re.match(r'^\d{2}\b', title):
                 cur_ch = title
                 if cur_ch not in chapters: chapters.append(cur_ch)
             
@@ -136,8 +113,9 @@ if st.session_state.doc:
         with t1:
             st.write("▼ **챕터를 선택하면 하위 항목이 나열됩니다.**")
             
-            # 오리지널 콤보박스
+            # 💡 사진 1, 2번과 동일한 오리지널 콤보박스 형태로 복구 완료
             sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
+            
             s1 = st.text_input("결과 내 검색", key="s1")
             
             if sel_ch != "선택하세요":
@@ -149,7 +127,6 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=400):
                     for idx, item in enumerate(ents):
-                        # 중복 에러 완벽 차단
                         if st.button(f"📄 {item['title']}", key=f"btn_ent_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
@@ -163,7 +140,7 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=450):
                     for idx, item in enumerate(itms):
-                        if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}_{item['page']}"):
+                        if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -176,7 +153,7 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=450):
                     for idx, item in enumerate(ops):
-                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}_{item['page']}"):
+                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -198,20 +175,15 @@ if st.session_state.doc:
                     st.session_state.current_page += 1
                     st.rerun()
 
-        # 💡 수정: 복사 중 잘리지 않도록 코드를 안전하게 여러 줄로 분할
+        # PDF 이미지 렌더링
         if st.session_state.rendered_page != st.session_state.current_page:
             p = st.session_state.doc.load_page(st.session_state.current_page)
             pix = p.get_pixmap(matrix=fitz.Matrix(2, 2))
-            
-            # 여기서 에러가 났었습니다! 안전하게 분리했습니다.
-            img_mode = "RGB"
-            img_size = [pix.width, pix.height]
-            st.session_state.rendered_img = Image.frombytes(img_mode, img_size, pix.samples)
+            st.session_state.rendered_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             st.session_state.rendered_page = st.session_state.current_page
-            
         st.image(st.session_state.rendered_img, use_container_width=True)
 
-        # [하단] 네비게이션
+        # [하단] 네비게이션 신설
         st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
         nc1_bot, nc2_bot, nc3_bot = st.columns([1, 2, 1])
         with nc1_bot:
