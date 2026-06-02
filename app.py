@@ -4,12 +4,33 @@ from PIL import Image
 import re
 
 # --- 페이지 설정 ---
-st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide")
+st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
+    /* 여백 최소화 */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        max-width: 100% !important;
+    }
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
+
     .stApp { background-color: #1A2639; color: #E2E8F0; }
-    .stTabs [data-baseweb="tab-list"] { background-color: #24344D; }
+    
+    /* 💡 수정 1: 탭 영역(첨부파일 2)만 상단에 고정 */
+    div[data-baseweb="tab-list"] {
+        position: sticky !important;
+        top: 0px !important;
+        z-index: 9999 !important;
+        background-color: #24344D !important;
+        padding-top: 10px !important;
+        padding-bottom: 10px !important;
+    }
     .stTabs [data-baseweb="tab"] { color: #E2E8F0; }
     .stTabs [aria-selected="true"] { color: #00D2FF !important; border-bottom: 2px solid #00D2FF !important; }
     
@@ -29,15 +50,28 @@ st.markdown("""
         color: #00D2FF !important;
     }
 
-    /* 삼성 탭 등 모바일 환경에서 네비게이션 버튼이 3줄로 깨지는 현상 방지 (1줄 강제 고정) */
+    /* 💡 수정 2: 네비게이션 버튼 1줄 강제 고정 및 간격 최적화 */
     .nav-anchor + div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
         align-items: center !important;
+        justify-content: space-between !important;
+        gap: 5px !important;
     }
     .nav-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
         min-width: 0 !important;
         width: auto !important;
         flex: 1 1 0% !important;
+    }
+    
+    /* 💡 페이지 텍스트 자동 크기 조정 (줄바꿈 방지) */
+    .page-info {
+        font-size: clamp(0.7rem, 3.5vw, 1.2rem) !important; /* 기기 크기에 따라 글자 크기 자동 변화 */
+        font-weight: bold;
+        text-align: center;
+        white-space: nowrap !important; /* 절대 줄바꿈 안 함 */
+        overflow: hidden !important;
+        margin-top: 5px;
+        color: #E2E8F0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -112,15 +146,11 @@ if st.session_state.doc:
         # --- MEL Entries ---
         with t1:
             st.write("▼ **챕터를 선택하면 하위 항목이 나열됩니다.**")
-            
-            # 💡 사진 1, 2번과 동일한 오리지널 콤보박스 형태로 복구 완료
             sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
-            
             s1 = st.text_input("결과 내 검색", key="s1")
             
             if sel_ch != "선택하세요":
                 ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == sel_ch and i['title'] != sel_ch]
-                
                 if clean(s1):
                     ents = [i for i in ents if clean(s1) in clean(i['title'])]
                 
@@ -140,7 +170,7 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=450):
                     for idx, item in enumerate(itms):
-                        if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}"):
+                        if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -153,7 +183,7 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=450):
                     for idx, item in enumerate(ops):
-                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}"):
+                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -168,7 +198,8 @@ if st.session_state.doc:
                     st.session_state.current_page -= 1
                     st.rerun()
         with nc2_top:
-            st.markdown(f"<h4 style='text-align:center; margin-top:5px;'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</h4>", unsafe_allow_html=True)
+            # 💡 수정된 자동 크기 조절 페이지 텍스트 적용
+            st.markdown(f"<div class='page-info'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</div>", unsafe_allow_html=True)
         with nc3_top:
             if st.button("다음 ▶", key="next_top", use_container_width=True):
                 if st.session_state.current_page < len(st.session_state.doc)-1: 
@@ -192,7 +223,8 @@ if st.session_state.doc:
                     st.session_state.current_page -= 1
                     st.rerun()
         with nc2_bot:
-            st.markdown(f"<h4 style='text-align:center; margin-top:5px;'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</h4>", unsafe_allow_html=True)
+            # 💡 수정된 자동 크기 조절 페이지 텍스트 적용
+            st.markdown(f"<div class='page-info'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</div>", unsafe_allow_html=True)
         with nc3_bot:
             if st.button("다음 ▶", key="next_bot", use_container_width=True):
                 if st.session_state.current_page < len(st.session_state.doc)-1: 
