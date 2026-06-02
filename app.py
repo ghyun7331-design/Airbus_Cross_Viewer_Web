@@ -13,19 +13,7 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { color: #E2E8F0; }
     .stTabs [aria-selected="true"] { color: #00D2FF !important; border-bottom: 2px solid #00D2FF !important; }
     
-    /* 챕터 선택용 라디오 버튼(키보드 팝업 방지용) 디자인 */
-    div[role="radiogroup"] > label > div:first-child { display: none !important; } 
-    div[role="radiogroup"] > label {
-        padding: 8px 12px;
-        background-color: #101824; 
-        border: 1px solid #24344D; 
-        border-radius: 4px;
-        margin-bottom: 2px !important;
-        cursor: pointer;
-    }
-    div[role="radiogroup"] > label:hover { background-color: #2D4263; }
-    
-    /* 검색 결과 버튼(리스트박스) 디자인 */
+    /* 검색 결과 리스트 디자인 */
     .list-item-btn div[data-testid="stButton"] > button {
         background-color: #101824 !important;
         border: 1px solid #24344D !important;
@@ -45,6 +33,7 @@ st.markdown("""
 
 st.title("✈️ MEL SEARCH")
 
+# --- 세션 상태 ---
 if 'doc' not in st.session_state: st.session_state.doc = None
 if 'toc_items' not in st.session_state: st.session_state.toc_items = []
 if 'current_page' not in st.session_state: st.session_state.current_page = 0
@@ -55,7 +44,7 @@ if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
 def clean(t): return str(t).replace("-", "").replace(" ", "").lower()
 
 # ==========================================
-# 1. 사이드바
+# 1. 사이드바: 파일 업로드 및 단순 목차
 # ==========================================
 with st.sidebar:
     st.header("📂 외부파일 열기")
@@ -79,7 +68,8 @@ with st.sidebar:
             is_itm = any("mel items" in path[l].lower() for l in path)
             is_ops = any("mel operational procedures" in path[l].lower() for l in path)
             
-            if is_ent and level == 2 and re.match(r'^\d{2}\b', title):
+            # [수정] 챕터 전체 이름 추출 로직 강화 ("21 Air Conditioning" 형태 보존)
+            if is_ent and re.match(r'^\d{2}\b', title):
                 cur_ch = title
                 if cur_ch not in chapters: chapters.append(cur_ch)
             
@@ -101,7 +91,7 @@ with st.sidebar:
                     st.markdown(f"{indent} {item['title']}", unsafe_allow_html=True)
 
 # ==========================================
-# 2. 메인 화면: 50:50 검색 및 결과 / 뷰어
+# 2. 메인 화면: 검색 및 뷰어
 # ==========================================
 if st.session_state.doc:
     col_l, col_r = st.columns([4, 6])
@@ -109,78 +99,54 @@ if st.session_state.doc:
     with col_l:
         t1, t2, t3 = st.tabs(["🔍 MEL Entries", "🔍 MEL Items", "🔍 Operational Proc."])
         
-        # --- MEL Entries (50:50 분할) ---
+        # --- MEL Entries ---
         with t1:
-            st.markdown("##### 🔍 상단: 검색 조건 (50%)")
-            with st.container(height=300):
-                sel_ch = st.radio("Chapter 선택", ["선택 대기 중..."] + st.session_state.chapters, label_visibility="collapsed", key="ch_sel_radio")
-                st.markdown("---")
-                s1 = st.text_input(f"하위 항목 검색 (선택된 Chapter 내)", key="s1")
+            st.write("▼ **챕터를 선택하면 하위 항목이 나열됩니다.**")
+            # [수정] 추출된 전체 챕터명 콤보박스 표시
+            sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
+            s1 = st.text_input("결과 내 검색", key="s1")
             
-            st.markdown("##### 📄 하단: 검색 결과 (50%)")
-            st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-            with st.container(height=300):
-                if sel_ch != "선택 대기 중...":
-                    ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == sel_ch and i['title'] != sel_ch]
-                    if clean(s1):
-                        ents = [i for i in ents if clean(s1) in clean(i['title'])]
-                    
-                    if ents:
-                        for idx, item in enumerate(ents):
-                            if st.button(f"📄 {item['title']}", key=f"btn_ent_{idx}_{item['page']}"):
-                                st.session_state.current_page = item['page']
-                                st.rerun()
-                    else:
-                        st.info("조건에 맞는 결과가 없습니다.")
-                else:
-                    st.info("상단에서 Chapter를 먼저 선택해 주세요.")
-            st.markdown('</div>', unsafe_allow_html=True)
+            if sel_ch != "선택하세요":
+                # [수정] 해당 챕터의 하부 리스트 정확히 매칭 및 본인(챕터명 자체) 제외
+                ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == sel_ch and i['title'] != sel_ch]
+                
+                if clean(s1):
+                    ents = [i for i in ents if clean(s1) in clean(i['title'])]
+                
+                st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
+                with st.container(height=400):
+                    for idx, item in enumerate(ents):
+                        if st.button(f"📄 {item['title']}", key=f"btn_ent_{idx}_{item['page']}"):
+                            st.session_state.current_page = item['page']
+                            st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- MEL Items (50:50 분할) ---
+        # --- MEL Items ---
         with t2:
-            st.markdown("##### 🔍 상단: 검색 조건 (50%)")
-            with st.container(height=300):
-                s2 = st.text_input("MEL Items 검색 (하이픈/띄어쓰기 생략 가능)", key="s2")
-            
-            st.markdown("##### 📄 하단: 검색 결과 (50%)")
-            st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-            with st.container(height=300):
-                if clean(s2):
-                    itms = [i for i in st.session_state.toc_items if i['is_itm'] and clean(s2) in clean(i['title'])]
-                    if itms:
-                        for idx, item in enumerate(itms):
-                            if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}"):
-                                st.session_state.current_page = item['page']
-                                st.rerun()
-                    else:
-                        st.info("일치하는 결과가 없습니다.")
-                else:
-                    st.info("검색어를 입력하시면 결과가 표시됩니다.")
-            st.markdown('</div>', unsafe_allow_html=True)
+            s2 = st.text_input("MEL Items 검색", key="s2")
+            if clean(s2):
+                itms = [i for i in st.session_state.toc_items if i['is_itm'] and clean(s2) in clean(i['title'])]
+                st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
+                with st.container(height=450):
+                    for idx, item in enumerate(itms):
+                        if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}"):
+                            st.session_state.current_page = item['page']
+                            st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- Operational Proc (50:50 분할) ---
+        # --- Operational Proc ---
         with t3:
-            st.markdown("##### 🔍 상단: 검색 조건 (50%)")
-            with st.container(height=300):
-                s3 = st.text_input("Operational Proc. 검색 (하이픈/띄어쓰기 생략 가능)", key="s3")
-            
-            st.markdown("##### 📄 하단: 검색 결과 (50%)")
-            st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-            with st.container(height=300):
-                if clean(s3):
-                    ops = [i for i in st.session_state.toc_items if i['is_ops'] and clean(s3) in clean(i['title'])]
-                    if ops:
-                        for idx, item in enumerate(ops):
-                            if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}"):
-                                st.session_state.current_page = item['page']
-                                st.rerun()
-                    else:
-                        st.info("일치하는 결과가 없습니다.")
-                else:
-                    st.info("검색어를 입력하시면 결과가 표시됩니다.")
-            st.markdown('</div>', unsafe_allow_html=True)
+            s3 = st.text_input("Operational Proc. 검색", key="s3")
+            if clean(s3):
+                ops = [i for i in st.session_state.toc_items if i['is_ops'] and clean(s3) in clean(i['title'])]
+                st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
+                with st.container(height=450):
+                    for idx, item in enumerate(ops):
+                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}"):
+                            st.session_state.current_page = item['page']
+                            st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- 우측 뷰어 ---
     with col_r:
         nc1, nc2, nc3 = st.columns([1, 2, 1])
         with nc1:
