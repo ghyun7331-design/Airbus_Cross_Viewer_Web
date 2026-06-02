@@ -8,24 +8,23 @@ st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide", i
 
 st.markdown("""
 <style>
-    /* 여백 최소화 */
+    /* 여백 최소화 (사이드바 버튼 공간 확보를 위해 상단 여백 조정) */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 3rem !important;
         padding-bottom: 1rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
         max-width: 100% !important;
     }
-    header[data-testid="stHeader"] {
-        display: none !important;
-    }
+    
+    /* ⚠️ 사이드바 버튼을 숨기는 코드를 영구 삭제했습니다. */
 
     .stApp { background-color: #1A2639; color: #E2E8F0; }
     
-    /* 💡 수정 1: 탭 영역(첨부파일 2)만 상단에 고정 */
+    /* 💡 수정 1: 탭 영역만 상단에 고정 (사이드바 버튼과 겹치지 않도록 top 위치 조정) */
     div[data-baseweb="tab-list"] {
         position: sticky !important;
-        top: 0px !important;
+        top: 2.5rem !important; 
         z-index: 9999 !important;
         background-color: #24344D !important;
         padding-top: 10px !important;
@@ -65,10 +64,10 @@ st.markdown("""
     
     /* 💡 페이지 텍스트 자동 크기 조정 (줄바꿈 방지) */
     .page-info {
-        font-size: clamp(0.7rem, 3.5vw, 1.2rem) !important; /* 기기 크기에 따라 글자 크기 자동 변화 */
+        font-size: clamp(0.7rem, 3.5vw, 1.2rem) !important;
         font-weight: bold;
         text-align: center;
-        white-space: nowrap !important; /* 절대 줄바꿈 안 함 */
+        white-space: nowrap !important;
         overflow: hidden !important;
         margin-top: 5px;
         color: #E2E8F0;
@@ -198,7 +197,6 @@ if st.session_state.doc:
                     st.session_state.current_page -= 1
                     st.rerun()
         with nc2_top:
-            # 💡 수정된 자동 크기 조절 페이지 텍스트 적용
             st.markdown(f"<div class='page-info'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</div>", unsafe_allow_html=True)
         with nc3_top:
             if st.button("다음 ▶", key="next_top", use_container_width=True):
@@ -214,7 +212,7 @@ if st.session_state.doc:
             st.session_state.rendered_page = st.session_state.current_page
         st.image(st.session_state.rendered_img, use_container_width=True)
 
-        # [하단] 네비게이션 신설
+        # [하단] 네비게이션
         st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
         nc1_bot, nc2_bot, nc3_bot = st.columns([1, 2, 1])
         with nc1_bot:
@@ -223,7 +221,6 @@ if st.session_state.doc:
                     st.session_state.current_page -= 1
                     st.rerun()
         with nc2_bot:
-            # 💡 수정된 자동 크기 조절 페이지 텍스트 적용
             st.markdown(f"<div class='page-info'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</div>", unsafe_allow_html=True)
         with nc3_bot:
             if st.button("다음 ▶", key="next_bot", use_container_width=True):
