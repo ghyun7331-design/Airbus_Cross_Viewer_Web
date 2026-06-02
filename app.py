@@ -29,7 +29,7 @@ st.markdown("""
         color: #00D2FF !important;
     }
 
-    /* 삼성 탭 등 모바일 환경에서 네비게이션 버튼이 3줄로 깨지는 현상 방지 (1줄 강제 고정) */
+    /* 💡 수정2: 삼성 탭 등 모바일 환경에서 네비게이션 버튼이 3줄로 깨지는 현상 방지 (1줄 강제 고정) */
     .nav-anchor + div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
         align-items: center !important;
@@ -40,7 +40,7 @@ st.markdown("""
         flex: 1 1 0% !important;
     }
     
-    /* 라디오 버튼 동그라미 숨기기 (터치하기 편한 사각 버튼처럼 보임) */
+    /* 💡 수정1: 라디오 버튼 동그라미 숨기기 (터치하기 편한 사각 버튼처럼 보임) */
     div[role="radiogroup"] > label > div:first-child { display: none !important; } 
     div[role="radiogroup"] > label {
         padding: 8px 12px; background-color: #101824; 
@@ -64,7 +64,7 @@ if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
 def clean(t): return str(t).replace("-", "").replace(" ", "").lower()
 
 # ==========================================
-# 1. 사이드바: 파일 업로드 및 단순 목차
+# 1. 사이드바: 파일 업로드 및 단순 목차 (기존 유지)
 # ==========================================
 with st.sidebar:
     st.header("📂 외부파일 열기")
@@ -120,15 +120,15 @@ if st.session_state.doc:
         
         # --- MEL Entries ---
         with t1:
-            st.markdown("##### 🔍 검색 조건 (고정 영역)")
+            st.write("▼ **챕터를 선택하면 하위 항목이 나열됩니다.**")
             
-            # 💡 UI 변경: 화면이 들썩이지 않도록 고정 높이 컨테이너로 챕터 목록 감싸기
-            with st.container(height=150):
-                sel_ch = st.radio("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel", label_visibility="collapsed")
+            # 💡 수정1: 콤보박스 대신 '접기/펼치기' 안의 라디오 버튼으로 키보드 팝업 원천 차단
+            current_ch = st.session_state.get('ch_sel', '선택하세요')
+            with st.expander(f"📁 Chapter 선택 (현재: {current_ch})"):
+                sel_ch = st.radio("목록에서 터치하여 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel", label_visibility="collapsed")
             
-            s1 = st.text_input("결과 내 검색 (입력창 고정)", key="s1")
+            s1 = st.text_input("결과 내 검색", key="s1")
             
-            st.markdown("##### 📄 검색 결과 (아래로 스크롤)")
             if sel_ch != "선택하세요":
                 ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == sel_ch and i['title'] != sel_ch]
                 
@@ -136,15 +136,12 @@ if st.session_state.doc:
                     ents = [i for i in ents if clean(s1) in clean(i['title'])]
                 
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-                # 💡 UI 변경: 결과창 영역만 독립적으로 스크롤되도록 설정
-                with st.container(height=350):
+                with st.container(height=400):
                     for idx, item in enumerate(ents):
                         if st.button(f"📄 {item['title']}", key=f"btn_ent_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
-            else:
-                st.info("상단에서 Chapter를 선택하시면 결과가 나열됩니다.")
 
         # --- MEL Items (기존 유지) ---
         with t2:
@@ -173,8 +170,8 @@ if st.session_state.doc:
                 st.markdown('</div>', unsafe_allow_html=True)
 
     with col_r:
-        # [상단] 네비게이션 (PDF 문서 위)
-        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
+        # 💡 수정3: [상단] 네비게이션 (PDF 문서 위)
+        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True) # 1줄 고정 마법
         nc1_top, nc2_top, nc3_top = st.columns([1, 2, 1])
         with nc1_top:
             if st.button("◀ 이전", key="prev_top", use_container_width=True):
@@ -197,8 +194,8 @@ if st.session_state.doc:
             st.session_state.rendered_page = st.session_state.current_page
         st.image(st.session_state.rendered_img, use_container_width=True)
 
-        # [하단] 네비게이션 신설 (PDF 문서 아래)
-        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
+        # 💡 수정3: [하단] 네비게이션 신설 (PDF 문서 아래)
+        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True) # 1줄 고정 마법
         nc1_bot, nc2_bot, nc3_bot = st.columns([1, 2, 1])
         with nc1_bot:
             if st.button("◀ 이전", key="prev_bot", use_container_width=True):
