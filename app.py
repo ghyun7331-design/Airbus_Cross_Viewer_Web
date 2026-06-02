@@ -28,6 +28,26 @@ st.markdown("""
         border-color: #00D2FF !important;
         color: #00D2FF !important;
     }
+
+    /* 💡 수정2: 삼성 탭 등 모바일 환경에서 네비게이션 버튼이 3줄로 깨지는 현상 방지 (1줄 강제 고정) */
+    .nav-anchor + div[data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+    }
+    .nav-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        min-width: 0 !important;
+        width: auto !important;
+        flex: 1 1 0% !important;
+    }
+    
+    /* 💡 수정1: 라디오 버튼 동그라미 숨기기 (터치하기 편한 사각 버튼처럼 보임) */
+    div[role="radiogroup"] > label > div:first-child { display: none !important; } 
+    div[role="radiogroup"] > label {
+        padding: 8px 12px; background-color: #101824; 
+        border: 1px solid #24344D; border-radius: 4px;
+        margin-bottom: 2px !important; cursor: pointer;
+    }
+    div[role="radiogroup"] > label:hover { background-color: #2D4263; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -44,7 +64,7 @@ if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
 def clean(t): return str(t).replace("-", "").replace(" ", "").lower()
 
 # ==========================================
-# 1. 사이드바: 파일 업로드 및 단순 목차
+# 1. 사이드바: 파일 업로드 및 단순 목차 (기존 유지)
 # ==========================================
 with st.sidebar:
     st.header("📂 외부파일 열기")
@@ -68,7 +88,6 @@ with st.sidebar:
             is_itm = any("mel items" in path[l].lower() for l in path)
             is_ops = any("mel operational procedures" in path[l].lower() for l in path)
             
-            # [수정] 챕터 전체 이름 추출 로직 강화 ("21 Air Conditioning" 형태 보존)
             if is_ent and re.match(r'^\d{2}\b', title):
                 cur_ch = title
                 if cur_ch not in chapters: chapters.append(cur_ch)
@@ -102,12 +121,15 @@ if st.session_state.doc:
         # --- MEL Entries ---
         with t1:
             st.write("▼ **챕터를 선택하면 하위 항목이 나열됩니다.**")
-            # [수정] 추출된 전체 챕터명 콤보박스 표시
-            sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
+            
+            # 💡 수정1: 콤보박스 대신 '접기/펼치기' 안의 라디오 버튼으로 키보드 팝업 원천 차단
+            current_ch = st.session_state.get('ch_sel', '선택하세요')
+            with st.expander(f"📁 Chapter 선택 (현재: {current_ch})"):
+                sel_ch = st.radio("목록에서 터치하여 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel", label_visibility="collapsed")
+            
             s1 = st.text_input("결과 내 검색", key="s1")
             
             if sel_ch != "선택하세요":
-                # [수정] 해당 챕터의 하부 리스트 정확히 매칭 및 본인(챕터명 자체) 제외
                 ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == sel_ch and i['title'] != sel_ch]
                 
                 if clean(s1):
@@ -121,7 +143,7 @@ if st.session_state.doc:
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- MEL Items ---
+        # --- MEL Items (기존 유지) ---
         with t2:
             s2 = st.text_input("MEL Items 검색", key="s2")
             if clean(s2):
@@ -134,7 +156,7 @@ if st.session_state.doc:
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- Operational Proc ---
+        # --- Operational Proc (기존 유지) ---
         with t3:
             s3 = st.text_input("Operational Proc. 검색", key="s3")
             if clean(s3):
@@ -148,25 +170,44 @@ if st.session_state.doc:
                 st.markdown('</div>', unsafe_allow_html=True)
 
     with col_r:
-        nc1, nc2, nc3 = st.columns([1, 2, 1])
-        with nc1:
-            if st.button("◀ 이전", use_container_width=True):
+        # 💡 수정3: [상단] 네비게이션 (PDF 문서 위)
+        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True) # 1줄 고정 마법
+        nc1_top, nc2_top, nc3_top = st.columns([1, 2, 1])
+        with nc1_top:
+            if st.button("◀ 이전", key="prev_top", use_container_width=True):
                 if st.session_state.current_page > 0: 
                     st.session_state.current_page -= 1
                     st.rerun()
-        with nc2:
-            st.markdown(f"<h4 style='text-align:center;'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</h4>", unsafe_allow_html=True)
-        with nc3:
-            if st.button("다음 ▶", use_container_width=True):
+        with nc2_top:
+            st.markdown(f"<h4 style='text-align:center; margin-top:5px;'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</h4>", unsafe_allow_html=True)
+        with nc3_top:
+            if st.button("다음 ▶", key="next_top", use_container_width=True):
                 if st.session_state.current_page < len(st.session_state.doc)-1: 
                     st.session_state.current_page += 1
                     st.rerun()
 
+        # PDF 이미지 렌더링
         if st.session_state.rendered_page != st.session_state.current_page:
             p = st.session_state.doc.load_page(st.session_state.current_page)
             pix = p.get_pixmap(matrix=fitz.Matrix(2, 2))
             st.session_state.rendered_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             st.session_state.rendered_page = st.session_state.current_page
         st.image(st.session_state.rendered_img, use_container_width=True)
+
+        # 💡 수정3: [하단] 네비게이션 신설 (PDF 문서 아래)
+        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True) # 1줄 고정 마법
+        nc1_bot, nc2_bot, nc3_bot = st.columns([1, 2, 1])
+        with nc1_bot:
+            if st.button("◀ 이전", key="prev_bot", use_container_width=True):
+                if st.session_state.current_page > 0: 
+                    st.session_state.current_page -= 1
+                    st.rerun()
+        with nc2_bot:
+            st.markdown(f"<h4 style='text-align:center; margin-top:5px;'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</h4>", unsafe_allow_html=True)
+        with nc3_bot:
+            if st.button("다음 ▶", key="next_bot", use_container_width=True):
+                if st.session_state.current_page < len(st.session_state.doc)-1: 
+                    st.session_state.current_page += 1
+                    st.rerun()
 else:
     st.info("👈 사이드바를 열어 PDF 파일을 업로드해 주세요.")
