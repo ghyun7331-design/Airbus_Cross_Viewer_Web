@@ -3,12 +3,12 @@ import fitz  # PyMuPDF
 from PIL import Image
 import re
 
-# --- 페이지 설정 ---
-st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide")
+# --- 페이지 설정 (처음부터 사이드바가 열려있도록 expanded 추가) ---
+st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    /* 💡 UI 개선 1: 불필요한 여백 삭제 및 화면 꽉 채우기 */
+    /* 여백 최소화하여 화면 꽉 채우기 (단, 헤더를 숨기지 않아 메뉴 버튼은 살려둠) */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
@@ -16,11 +16,8 @@ st.markdown("""
         padding-right: 1rem !important;
         max-width: 100% !important;
     }
-    header[data-testid="stHeader"] {
-        display: none !important;
-    }
 
-    /* 💡 UI 개선 2: 탭을 상단에 딱 고정 (틀 고정) */
+    /* 탭 상단 고정 */
     div[data-testid="stTabs"] {
         position: sticky !important;
         top: 0px !important;
@@ -66,7 +63,7 @@ st.markdown("""
 
 st.title("✈️ MEL SEARCH")
 
-# --- 세션 상태 (화면 전환을 위한 step 변수 추가) ---
+# --- 세션 상태 ---
 if 'doc' not in st.session_state: st.session_state.doc = None
 if 'toc_items' not in st.session_state: st.session_state.toc_items = []
 if 'current_page' not in st.session_state: st.session_state.current_page = 0
@@ -74,7 +71,7 @@ if 'chapters' not in st.session_state: st.session_state.chapters = []
 if 'rendered_page' not in st.session_state: st.session_state.rendered_page = -1
 if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
 
-# 💡 1페이지/2페이지 전환을 기억하는 변수
+# 화면 전환을 위한 상태 변수
 if 't1_step' not in st.session_state: st.session_state.t1_step = 1 
 if 't1_selected_ch' not in st.session_state: st.session_state.t1_selected_ch = "선택하세요"
 
@@ -105,6 +102,7 @@ with st.sidebar:
             is_itm = any("mel items" in path[l].lower() for l in path)
             is_ops = any("mel operational procedures" in path[l].lower() for l in path)
             
+            # 챕터명 추출 시 PDF에 있는 전체 이름 가져오기
             if is_ent and re.match(r'^\d{2}\b', title):
                 cur_ch = title
                 if cur_ch not in chapters: chapters.append(cur_ch)
@@ -135,21 +133,18 @@ if st.session_state.doc:
     with col_l:
         t1, t2, t3 = st.tabs(["🔍 MEL Entries", "🔍 MEL Items", "🔍 Operational Proc."])
         
-        # --- 💡 MEL Entries (1페이지 / 2페이지 화면 전환 방식) ---
+        # --- MEL Entries (1페이지/2페이지 전환 방식) ---
         with t1:
             if st.session_state.t1_step == 1:
-                # [1페이지] 챕터 선택 화면
                 st.write("▼ **챕터를 선택하면 결과 화면으로 이동합니다.**")
                 sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
                 
-                # 선택하는 순간 2페이지로 상태 변경
                 if sel_ch != "선택하세요":
                     st.session_state.t1_selected_ch = sel_ch
                     st.session_state.t1_step = 2
                     st.rerun()
                     
             elif st.session_state.t1_step == 2:
-                # [2페이지] 결과 화면
                 if st.button("◀ 챕터 다시 선택하기 (뒤로 가기)", use_container_width=True):
                     st.session_state.t1_step = 1
                     st.session_state.t1_selected_ch = "선택하세요"
@@ -166,8 +161,8 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=500):
                     for idx, item in enumerate(ents):
-                        # 에러 차단을 위해 고유 키(idx) 할당
-                        if st.button(f"📄 {item['title']}", key=f"btn_ent_{idx}_{item['page']}"):
+                        # 중복 에러 차단을 위해 idx와 page를 키에 강제 주입
+                        if st.button(f"📄 {item['title']}", key=f"btn_ent_2page_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -183,60 +178,4 @@ if st.session_state.doc:
                         if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        # --- Operational Proc ---
-        with t3:
-            s3 = st.text_input("Operational Proc. 검색", key="s3")
-            if clean(s3):
-                ops = [i for i in st.session_state.toc_items if i['is_ops'] and clean(s3) in clean(i['title'])]
-                st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-                with st.container(height=450):
-                    for idx, item in enumerate(ops):
-                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}_{item['page']}"):
-                            st.session_state.current_page = item['page']
-                            st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_r:
-        # [상단] 네비게이션
-        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
-        nc1_top, nc2_top, nc3_top = st.columns([1, 2, 1])
-        with nc1_top:
-            if st.button("◀ 이전", key="prev_top", use_container_width=True):
-                if st.session_state.current_page > 0: 
-                    st.session_state.current_page -= 1
-                    st.rerun()
-        with nc2_top:
-            st.markdown(f"<h4 style='text-align:center; margin-top:5px;'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</h4>", unsafe_allow_html=True)
-        with nc3_top:
-            if st.button("다음 ▶", key="next_top", use_container_width=True):
-                if st.session_state.current_page < len(st.session_state.doc)-1: 
-                    st.session_state.current_page += 1
-                    st.rerun()
-
-        # PDF 이미지 렌더링
-        if st.session_state.rendered_page != st.session_state.current_page:
-            p = st.session_state.doc.load_page(st.session_state.current_page)
-            pix = p.get_pixmap(matrix=fitz.Matrix(2, 2))
-            st.session_state.rendered_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            st.session_state.rendered_page = st.session_state.current_page
-        st.image(st.session_state.rendered_img, use_container_width=True)
-
-        # [하단] 네비게이션
-        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
-        nc1_bot, nc2_bot, nc3_bot = st.columns([1, 2, 1])
-        with nc1_bot:
-            if st.button("◀ 이전", key="prev_bot", use_container_width=True):
-                if st.session_state.current_page > 0: 
-                    st.session_state.current_page -= 1
-                    st.rerun()
-        with nc2_bot:
-            st.markdown(f"<h4 style='text-align:center; margin-top:5px;'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</h4>", unsafe_allow_html=True)
-        with nc3_bot:
-            if st.button("다음 ▶", key="next_bot", use_container_width=True):
-                if st.session_state.current_page < len(st.session_state.doc)-1: 
-                    st.session_state.current_page += 1
-                    st.rerun()
-else:
-    st.info("👈 사이드바를 열어 PDF 파일을 업로드해 주세요.")
+                st
