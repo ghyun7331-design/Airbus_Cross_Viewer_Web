@@ -8,17 +8,16 @@ st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide", i
 
 st.markdown("""
 <style>
-    /* 여백 최소화하여 메인 화면 꽉 채우기 */
+    /* 💡 사이드바 열기 버튼(>) 공간 확보를 위해 상단 여백(3rem) 유지, 나머지 여백 최소화 */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 3rem !important;
         padding-bottom: 1rem !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
         max-width: 100% !important;
     }
-    header[data-testid="stHeader"] {
-        display: none !important;
-    }
+    
+    /* ⚠️ 사이드바 버튼을 숨기는 악성 코드(header display:none) 완전 삭제 완료! */
 
     .stApp { background-color: #1A2639; color: #E2E8F0; }
     
@@ -27,7 +26,7 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { color: #E2E8F0; font-size: 0.9rem; }
     .stTabs [aria-selected="true"] { color: #00D2FF !important; border-bottom: 2px solid #00D2FF !important; }
     
-    /* 검색 결과 리스트 디자인 (사이드바에 맞게 패딩 최적화) */
+    /* 검색 결과 리스트 디자인 */
     .list-item-btn div[data-testid="stButton"] > button {
         background-color: #101824 !important;
         border: 1px solid #24344D !important;
@@ -121,7 +120,6 @@ with st.sidebar:
     # 파일이 업로드되면 사이드바에 검색 탭 표시
     if st.session_state.doc:
         st.markdown("---")
-        # 사이드바 폭을 고려해 탭 이름을 간결하게 조정
         t1, t2, t3 = st.tabs(["Entries", "Items", "Oper. Proc."])
         
         # --- MEL Entries ---
@@ -172,8 +170,6 @@ with st.sidebar:
 # 2. 메인 화면: 100% 뷰어 전용
 # ==========================================
 if st.session_state.doc:
-    # 좌우 분할(col_l, col_r) 삭제, 화면 전체를 뷰어로 사용
-    
     # [상단] 네비게이션
     st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
     nc1_top, nc2_top, nc3_top = st.columns([1, 2, 1])
@@ -214,5 +210,4 @@ if st.session_state.doc:
                 st.session_state.current_page += 1
                 st.rerun()
 else:
-    # 뷰어 화면 중앙 안내 문구 (사이드바 열기 유도)
-    st.info("👈 좌측 상단의 사이드바 열기(>) 버튼을 눌러 PDF 파일을 업로드해 주세요.")
+    st.info("👈 좌측 상단의 화살표(>)를 눌러 사이드바를 열고 PDF 파일을 업로드해 주세요.")
