@@ -8,6 +8,28 @@ st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide")
 
 st.markdown("""
 <style>
+    /* 💡 UI 개선: 빈 공간 삭제 및 화면 꽉 채우기 */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        max-width: 100% !important;
+    }
+    header[data-testid="stHeader"] {
+        display: none !important; /* 상단 불필요한 기본 헤더 공간 삭제 */
+    }
+
+    /* 💡 UI 개선: 탭 상단 고정 (Sticky) */
+    div[data-testid="stTabs"] {
+        position: sticky !important;
+        top: 0px !important;
+        z-index: 9999 !important;
+        background-color: #1A2639 !important; 
+        padding-top: 5px !important;
+        padding-bottom: 5px !important;
+    }
+
     .stApp { background-color: #1A2639; color: #E2E8F0; }
     .stTabs [data-baseweb="tab-list"] { background-color: #24344D; }
     .stTabs [data-baseweb="tab"] { color: #E2E8F0; }
@@ -29,7 +51,7 @@ st.markdown("""
         color: #00D2FF !important;
     }
 
-    /* 💡 수정2: 삼성 탭 등 모바일 환경에서 네비게이션 버튼이 3줄로 깨지는 현상 방지 (1줄 강제 고정) */
+    /* 네비게이션 버튼 1줄 강제 고정 */
     .nav-anchor + div[data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
         align-items: center !important;
@@ -39,15 +61,6 @@ st.markdown("""
         width: auto !important;
         flex: 1 1 0% !important;
     }
-    
-    /* 💡 수정1: 라디오 버튼 동그라미 숨기기 (터치하기 편한 사각 버튼처럼 보임) */
-    div[role="radiogroup"] > label > div:first-child { display: none !important; } 
-    div[role="radiogroup"] > label {
-        padding: 8px 12px; background-color: #101824; 
-        border: 1px solid #24344D; border-radius: 4px;
-        margin-bottom: 2px !important; cursor: pointer;
-    }
-    div[role="radiogroup"] > label:hover { background-color: #2D4263; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,7 +77,7 @@ if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
 def clean(t): return str(t).replace("-", "").replace(" ", "").lower()
 
 # ==========================================
-# 1. 사이드바: 파일 업로드 및 단순 목차 (기존 유지)
+# 1. 사이드바: 파일 업로드 및 단순 목차
 # ==========================================
 with st.sidebar:
     st.header("📂 외부파일 열기")
@@ -122,10 +135,7 @@ if st.session_state.doc:
         with t1:
             st.write("▼ **챕터를 선택하면 하위 항목이 나열됩니다.**")
             
-            # 💡 수정1: 콤보박스 대신 '접기/펼치기' 안의 라디오 버튼으로 키보드 팝업 원천 차단
-            current_ch = st.session_state.get('ch_sel', '선택하세요')
-            with st.expander(f"📁 Chapter 선택 (현재: {current_ch})"):
-                sel_ch = st.radio("목록에서 터치하여 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel", label_visibility="collapsed")
+            sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
             
             s1 = st.text_input("결과 내 검색", key="s1")
             
@@ -143,7 +153,7 @@ if st.session_state.doc:
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- MEL Items (기존 유지) ---
+        # --- MEL Items ---
         with t2:
             s2 = st.text_input("MEL Items 검색", key="s2")
             if clean(s2):
@@ -156,7 +166,7 @@ if st.session_state.doc:
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- Operational Proc (기존 유지) ---
+        # --- Operational Proc ---
         with t3:
             s3 = st.text_input("Operational Proc. 검색", key="s3")
             if clean(s3):
@@ -170,8 +180,8 @@ if st.session_state.doc:
                 st.markdown('</div>', unsafe_allow_html=True)
 
     with col_r:
-        # 💡 수정3: [상단] 네비게이션 (PDF 문서 위)
-        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True) # 1줄 고정 마법
+        # [상단] 네비게이션
+        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
         nc1_top, nc2_top, nc3_top = st.columns([1, 2, 1])
         with nc1_top:
             if st.button("◀ 이전", key="prev_top", use_container_width=True):
@@ -194,8 +204,8 @@ if st.session_state.doc:
             st.session_state.rendered_page = st.session_state.current_page
         st.image(st.session_state.rendered_img, use_container_width=True)
 
-        # 💡 수정3: [하단] 네비게이션 신설 (PDF 문서 아래)
-        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True) # 1줄 고정 마법
+        # [하단] 네비게이션 신설
+        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
         nc1_bot, nc2_bot, nc3_bot = st.columns([1, 2, 1])
         with nc1_bot:
             if st.button("◀ 이전", key="prev_bot", use_container_width=True):
