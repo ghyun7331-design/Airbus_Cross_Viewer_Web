@@ -3,12 +3,12 @@ import fitz  # PyMuPDF
 from PIL import Image
 import re
 
-# --- 페이지 설정 (처음부터 사이드바가 열려있도록 expanded 추가) ---
+# --- 페이지 설정 ---
 st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    /* 여백 최소화하여 화면 꽉 채우기 (단, 헤더를 숨기지 않아 메뉴 버튼은 살려둠) */
+    /* 여백 최소화하여 화면 꽉 채우기 */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
@@ -16,8 +16,11 @@ st.markdown("""
         padding-right: 1rem !important;
         max-width: 100% !important;
     }
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
 
-    /* 탭 상단 고정 */
+    /* 탭 상단 고정 (스크롤 시에도 위에 붙어있음) */
     div[data-testid="stTabs"] {
         position: sticky !important;
         top: 0px !important;
@@ -71,10 +74,6 @@ if 'chapters' not in st.session_state: st.session_state.chapters = []
 if 'rendered_page' not in st.session_state: st.session_state.rendered_page = -1
 if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
 
-# 화면 전환을 위한 상태 변수
-if 't1_step' not in st.session_state: st.session_state.t1_step = 1 
-if 't1_selected_ch' not in st.session_state: st.session_state.t1_selected_ch = "선택하세요"
-
 def clean(t): return str(t).replace("-", "").replace(" ", "").lower()
 
 # ==========================================
@@ -102,7 +101,6 @@ with st.sidebar:
             is_itm = any("mel items" in path[l].lower() for l in path)
             is_ops = any("mel operational procedures" in path[l].lower() for l in path)
             
-            # 챕터명 추출 시 PDF에 있는 전체 이름 가져오기
             if is_ent and re.match(r'^\d{2}\b', title):
                 cur_ch = title
                 if cur_ch not in chapters: chapters.append(cur_ch)
@@ -133,36 +131,24 @@ if st.session_state.doc:
     with col_l:
         t1, t2, t3 = st.tabs(["🔍 MEL Entries", "🔍 MEL Items", "🔍 Operational Proc."])
         
-        # --- MEL Entries (1페이지/2페이지 전환 방식) ---
+        # --- MEL Entries ---
         with t1:
-            if st.session_state.t1_step == 1:
-                st.write("▼ **챕터를 선택하면 결과 화면으로 이동합니다.**")
-                sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
-                
-                if sel_ch != "선택하세요":
-                    st.session_state.t1_selected_ch = sel_ch
-                    st.session_state.t1_step = 2
-                    st.rerun()
-                    
-            elif st.session_state.t1_step == 2:
-                if st.button("◀ 챕터 다시 선택하기 (뒤로 가기)", use_container_width=True):
-                    st.session_state.t1_step = 1
-                    st.session_state.t1_selected_ch = "선택하세요"
-                    st.rerun()
-                
-                st.markdown(f"**현재 Chapter: {st.session_state.t1_selected_ch}**")
-                s1 = st.text_input("결과 내 검색", key="s1")
-                
-                ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == st.session_state.t1_selected_ch and i['title'] != st.session_state.t1_selected_ch]
+            st.write("▼ **챕터를 선택하면 하위 항목이 나열됩니다.**")
+            
+            sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
+            s1 = st.text_input("결과 내 검색", key="s1")
+            
+            if sel_ch != "선택하세요":
+                ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == sel_ch and i['title'] != sel_ch]
                 
                 if clean(s1):
                     ents = [i for i in ents if clean(s1) in clean(i['title'])]
                 
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-                with st.container(height=500):
+                with st.container(height=400):
                     for idx, item in enumerate(ents):
-                        # 중복 에러 차단을 위해 idx와 page를 키에 강제 주입
-                        if st.button(f"📄 {item['title']}", key=f"btn_ent_2page_{idx}_{item['page']}"):
+                        # 중복 에러 차단
+                        if st.button(f"📄 {item['title']}", key=f"btn_ent_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -178,4 +164,40 @@ if st.session_state.doc:
                         if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
-                st
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        # --- Operational Proc ---
+        with t3:
+            s3 = st.text_input("Operational Proc. 검색", key="s3")
+            if clean(s3):
+                ops = [i for i in st.session_state.toc_items if i['is_ops'] and clean(s3) in clean(i['title'])]
+                st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
+                with st.container(height=450):
+                    for idx, item in enumerate(ops):
+                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}_{item['page']}"):
+                            st.session_state.current_page = item['page']
+                            st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_r:
+        # [상단] 네비게이션
+        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
+        nc1_top, nc2_top, nc3_top = st.columns([1, 2, 1])
+        with nc1_top:
+            if st.button("◀ 이전", key="prev_top", use_container_width=True):
+                if st.session_state.current_page > 0: 
+                    st.session_state.current_page -= 1
+                    st.rerun()
+        with nc2_top:
+            st.markdown(f"<h4 style='text-align:center; margin-top:5px;'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</h4>", unsafe_allow_html=True)
+        with nc3_top:
+            if st.button("다음 ▶", key="next_top", use_container_width=True):
+                if st.session_state.current_page < len(st.session_state.doc)-1: 
+                    st.session_state.current_page += 1
+                    st.rerun()
+
+        # PDF 이미지 렌더링
+        if st.session_state.rendered_page != st.session_state.current_page:
+            p = st.session_state.doc.load_page(st.session_state.current_page)
+            pix = p.get_pixmap(matrix=fitz.Matrix(2, 2))
+            st.session_state.rendered_img = Image.frombytes("RGB", [pix.width, pix.height
