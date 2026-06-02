@@ -20,7 +20,7 @@ st.markdown("""
         display: none !important;
     }
 
-    /* 탭 상단 고정 (스크롤 시에도 위에 붙어있음) */
+    /* 탭 상단 고정 */
     div[data-testid="stTabs"] {
         position: sticky !important;
         top: 0px !important;
@@ -101,7 +101,8 @@ with st.sidebar:
             is_itm = any("mel items" in path[l].lower() for l in path)
             is_ops = any("mel operational procedures" in path[l].lower() for l in path)
             
-            if is_ent and re.match(r'^\d{2}\b', title):
+            # 💡 수정: PDF 내부 목차의 전체 이름("21 Air Conditioning")을 정확히 가져오도록 개선
+            if is_ent and level == 2 and re.match(r'^\d{2}\b', title):
                 cur_ch = title
                 if cur_ch not in chapters: chapters.append(cur_ch)
             
@@ -135,6 +136,7 @@ if st.session_state.doc:
         with t1:
             st.write("▼ **챕터를 선택하면 하위 항목이 나열됩니다.**")
             
+            # 오리지널 콤보박스
             sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
             s1 = st.text_input("결과 내 검색", key="s1")
             
@@ -147,7 +149,7 @@ if st.session_state.doc:
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=400):
                     for idx, item in enumerate(ents):
-                        # 중복 에러 차단
+                        # 중복 에러 완벽 차단
                         if st.button(f"📄 {item['title']}", key=f"btn_ent_{idx}_{item['page']}"):
                             st.session_state.current_page = item['page']
                             st.rerun()
@@ -196,8 +198,33 @@ if st.session_state.doc:
                     st.session_state.current_page += 1
                     st.rerun()
 
-        # PDF 이미지 렌더링
+        # 💡 수정: 복사 중 잘리지 않도록 코드를 안전하게 여러 줄로 분할
         if st.session_state.rendered_page != st.session_state.current_page:
             p = st.session_state.doc.load_page(st.session_state.current_page)
             pix = p.get_pixmap(matrix=fitz.Matrix(2, 2))
-            st.session_state.rendered_img = Image.frombytes("RGB", [pix.width, pix.height
+            
+            # 여기서 에러가 났었습니다! 안전하게 분리했습니다.
+            img_mode = "RGB"
+            img_size = [pix.width, pix.height]
+            st.session_state.rendered_img = Image.frombytes(img_mode, img_size, pix.samples)
+            st.session_state.rendered_page = st.session_state.current_page
+            
+        st.image(st.session_state.rendered_img, use_container_width=True)
+
+        # [하단] 네비게이션
+        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
+        nc1_bot, nc2_bot, nc3_bot = st.columns([1, 2, 1])
+        with nc1_bot:
+            if st.button("◀ 이전", key="prev_bot", use_container_width=True):
+                if st.session_state.current_page > 0: 
+                    st.session_state.current_page -= 1
+                    st.rerun()
+        with nc2_bot:
+            st.markdown(f"<h4 style='text-align:center; margin-top:5px;'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</h4>", unsafe_allow_html=True)
+        with nc3_bot:
+            if st.button("다음 ▶", key="next_bot", use_container_width=True):
+                if st.session_state.current_page < len(st.session_state.doc)-1: 
+                    st.session_state.current_page += 1
+                    st.rerun()
+else:
+    st.info("👈 사이드바를 열어 PDF 파일을 업로드해 주세요.")
