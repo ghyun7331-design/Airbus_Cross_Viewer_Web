@@ -13,12 +13,25 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] { background-color: #24344D; }
     .stTabs [data-baseweb="tab"] { color: #E2E8F0; }
     .stTabs [aria-selected="true"] { color: #00D2FF !important; border-bottom: 2px solid #00D2FF !important; }
-    /* 라디오 버튼 간격 미세 조정 */
-    .stRadio > label { margin-bottom: -10px; } 
+    
+    /* 🔥 트리 구조 마법: 일반 버튼을 깔끔한 폴더 목록 텍스트처럼 보이게 만듭니다 */
+    div[data-testid="stButton"] > button[kind="secondary"] {
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        padding: 2px 10px !important;
+        color: #E2E8F0 !important;
+        font-family: 'Consolas', monospace;
+    }
+    div[data-testid="stButton"] > button[kind="secondary"]:hover {
+        background-color: #2D4263 !important;
+        color: #00D2FF !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# 1. 타이틀 심플하게 변경
 st.title("✈️ MEL SEARCH")
 
 # --- 상태 저장소 초기화 ---
@@ -28,16 +41,13 @@ if 'toc_items' not in st.session_state:
     st.session_state.toc_items = []
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 0
-if 'chapters' not in st.session_state:
-    st.session_state.chapters = ["ALL"]
-# 속도 향상용 캐시
 if 'rendered_page_num' not in st.session_state:
     st.session_state.rendered_page_num = -1
 if 'rendered_image' not in st.session_state:
     st.session_state.rendered_image = None
 
 # ==========================================
-# 좌측 패널 (사이드바): 파일 업로드 전용으로 심플하게 유지
+# 좌측 패널 (사이드바)
 # ==========================================
 with st.sidebar:
     st.header("📂 외부파일 열기")
@@ -50,7 +60,6 @@ with st.sidebar:
         
         toc = st.session_state.doc.get_toc()
         parsed_toc = []
-        chapters = set()
         path = {}
         
         for item in toc:
@@ -68,7 +77,6 @@ with st.sidebar:
                 ch_match = re.match(r'^(\d{2})\b', title)
                 if ch_match:
                     ch_val = ch_match.group(1)
-                    chapters.add(ch_val)
                     
             parsed_toc.append({
                 'level': level, 'title': title, 'page': page_num,
@@ -76,7 +84,6 @@ with st.sidebar:
             })
             
         st.session_state.toc_items = parsed_toc
-        st.session_state.chapters = ["ALL"] + sorted(list(chapters))
 
 # ==========================================
 # 메인 화면 분할 (검색 탭 / 뷰어)
@@ -85,90 +92,85 @@ if st.session_state.doc:
     col_search, col_viewer = st.columns([4, 6])
     
     with col_search:
-        # 2. 기타 탭을 '기타 (목차)'로 변경
         tab1, tab2, tab3, tab4 = st.tabs(["🔍 MEL Entries", "🔍 MEL Items", "🔍 Operational Proc.", "📁 기타 (목차)"])
         
-        # --- 탭 1: MEL Entries ---
+        # --- 탭 1: MEL Entries (트리 구조 구현) ---
         with tab1:
-            sub_col1, sub_col2 = st.columns([1, 2])
-            with sub_col1:
-                selected_chapter = st.selectbox("Chapter 선택", st.session_state.chapters, key="ch_sel")
-            with sub_col2:
-                search_text_1 = st.text_input("결과 내 검색", key="search1")
-                
-            filtered_entries = [
-                item for item in st.session_state.toc_items 
-                if item['is_entries'] 
-                and (selected_chapter == "ALL" or item['chapter'] == selected_chapter)
-                and (search_text_1.lower() in item['title'].lower())
-            ]
+            search_text_1 = st.text_input("MEL Entries 내에서 검색", key="search1")
+            search_term_1 = search_text_1.replace("-", "").strip().lower()
             
-            entry_titles = [f"{item['title']} (p.{item['page']+1})" for item in filtered_entries]
+            # MEL Entries 범위로만 엄격하게 한정
+            entries = [i for i in st.session_state.toc_items if i['is_entries']]
+            if search_term_1:
+                entries = [i for i in entries if search_term_1 in i['title'].replace("-", "").lower()]
             
-            # 3. 특정 챕터 선택 시, 하위 목록이 아래로 펼쳐지는 구조 (PC 뷰어 느낌 구현)
-            if selected_chapter != "ALL":
-                st.write(f"📂 **Chapter {selected_chapter} 하위 항목**")
-                # 리스트 형태로 길게 펼쳐서 보여줌 (스크롤 컨테이너 적용)
-                with st.container(height=350):
-                    selected_entry = st.radio("목록", ["대기 중..."] + entry_titles, label_visibility="collapsed", key="radio1")
-            else:
-                # ALL일 때는 리스트가 너무 길어지므로 콤보박스로 유지
-                selected_entry = st.selectbox("🎯 전체 검색 결과", ["대기 중..."] + entry_titles, key="combo1")
+            chapters_present = sorted(list(set(i['chapter'] for i in entries)))
             
-            if selected_entry != "대기 중...":
-                idx = entry_titles.index(selected_entry)
-                st.session_state.current_page = filtered_entries[idx]['page']
+            st.write("▼ **하위 목록을 보려면 챕터를 클릭하세요 (트리 구조)**")
+            with st.container(height=500):
+                for ch in chapters_present:
+                    ch_items = [i for i in entries if i['chapter'] == ch]
+                    if not ch_items: continue
+                    
+                    ch_label = f"Chapter {ch}" if ch else "기타 항목"
+                    # 사진처럼 챕터를 누르면 하위 리스트가 열리는 폴더 구조 생성
+                    with st.expander(f"📁 {ch_label} ({len(ch_items)}건)"):
+                        for item in ch_items:
+                            # 버튼을 텍스트 목록처럼 디자인하여 클릭 즉시 페이지 이동
+                            if st.button(f"📄 {item['title']} (p.{item['page']+1})", key=f"btn1_{item['page']}_{item['title']}", use_container_width=True):
+                                st.session_state.current_page = item['page']
 
         # --- 탭 2: MEL Items ---
         with tab2:
-            search_text_2 = st.text_input("MEL Items 검색", key="search2")
-            filtered_items = [
-                item for item in st.session_state.toc_items 
-                if item['is_items'] and (search_text_2.lower() in item['title'].lower())
-            ]
-            item_titles = [f"{item['title']} (p.{item['page']+1})" for item in filtered_items]
-            selected_item = st.selectbox("🎯 검색 결과 목록:", ["대기 중..."] + item_titles, key="combo2")
+            search_text_2 = st.text_input("MEL Items 내에서 검색", key="search2")
+            search_term_2 = search_text_2.replace("-", "").strip().lower()
             
-            if selected_item != "대기 중...":
-                idx = item_titles.index(selected_item)
-                st.session_state.current_page = filtered_items[idx]['page']
+            # MEL Items 범위로만 엄격하게 한정
+            items = [i for i in st.session_state.toc_items if i['is_items']]
+            if search_term_2:
+                items = [i for i in items if search_term_2 in i['title'].replace("-", "").lower()]
+            
+            with st.container(height=500):
+                for item in items:
+                    if st.button(f"📄 {item['title']} (p.{item['page']+1})", key=f"btn2_{item['page']}_{item['title']}", use_container_width=True):
+                        st.session_state.current_page = item['page']
 
         # --- 탭 3: Operational Proc ---
         with tab3:
-            search_text_3 = st.text_input("Operational Proc. 검색", key="search3")
-            filtered_ops = [
-                item for item in st.session_state.toc_items 
-                if item['is_ops'] and (search_text_3.lower() in item['title'].lower())
-            ]
-            ops_titles = [f"{item['title']} (p.{item['page']+1})" for item in filtered_ops]
-            selected_op = st.selectbox("🎯 검색 결과 목록:", ["대기 중..."] + ops_titles, key="combo3")
+            search_text_3 = st.text_input("Operational Proc. 내에서 검색", key="search3")
+            search_term_3 = search_text_3.replace("-", "").strip().lower()
             
-            if selected_op != "대기 중...":
-                idx = ops_titles.index(selected_op)
-                st.session_state.current_page = filtered_ops[idx]['page']
+            # Operational Proc 범위로만 엄격하게 한정
+            ops = [i for i in st.session_state.toc_items if i['is_ops']]
+            if search_term_3:
+                ops = [i for i in ops if search_term_3 in i['title'].replace("-", "").lower()]
+            
+            with st.container(height=500):
+                for item in ops:
+                    if st.button(f"📄 {item['title']} (p.{item['page']+1})", key=f"btn3_{item['page']}_{item['title']}", use_container_width=True):
+                        st.session_state.current_page = item['page']
                     
         # --- 탭 4: 기타 (목차) ---
         with tab4:
-            st.subheader("📑 문서 전체 목차 (Table of Contents)")
-            # 2. 사이드바에 있던 목차를 이곳으로 이동, 스크롤 박스로 깔끔하게 처리
-            with st.container(height=400):
+            st.subheader("📑 문서 전체 목차")
+            with st.container(height=500):
                 for item in st.session_state.toc_items:
-                    if item['level'] <= 3: # 너무 깊은 항목은 숨김
+                    if item['level'] <= 3:
                         indent = "&nbsp;" * (item['level'] * 4)
-                        # 아이콘 추가로 트리 느낌 강조
-                        icon = "📄" if item['level'] == 3 else "📂"
+                        icon = "📄" if item['level'] == 3 else "📁"
                         st.markdown(f"{indent} {icon} {item['title']} (p.{item['page']+1})")
 
     with col_viewer:
         nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
         with nav_col1:
-            if st.button("◀ 이전 페이지"):
+            # 페이지 이동 버튼은 'primary' 타입을 주어 버튼 모양 유지
+            if st.button("◀ 이전 페이지", type="primary"):
                 if st.session_state.current_page > 0:
                     st.session_state.current_page -= 1
         with nav_col2:
             st.markdown(f"<h4 style='text-align: center; color: #00D2FF;'>PAGE: {st.session_state.current_page + 1} / {len(st.session_state.doc)}</h4>", unsafe_allow_html=True)
         with nav_col3:
-            if st.button("다음 페이지 ▶"):
+            if st.button("다음 페이지 ▶", type="primary"):
                 if st.session_state.current_page < len(st.session_state.doc) - 1:
                     st.session_state.current_page += 1
 
