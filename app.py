@@ -5,7 +5,7 @@ import io
 import re
 
 # --- 페이지 기본 설정 ---
-st.set_page_config(page_title="AIRBUS CROSS-SEARCH", page_icon="✈️", layout="wide")
+st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide")
 
 st.markdown("""
 <style>
@@ -13,10 +13,13 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] { background-color: #24344D; }
     .stTabs [data-baseweb="tab"] { color: #E2E8F0; }
     .stTabs [aria-selected="true"] { color: #00D2FF !important; border-bottom: 2px solid #00D2FF !important; }
+    /* 라디오 버튼 간격 미세 조정 */
+    .stRadio > label { margin-bottom: -10px; } 
 </style>
 """, unsafe_allow_html=True)
 
-st.title("✈️ DOCUMENT CROSS-SEARCH & VIEWER (Web Ver.)")
+# 1. 타이틀 심플하게 변경
+st.title("✈️ MEL SEARCH")
 
 # --- 상태 저장소 초기화 ---
 if 'doc' not in st.session_state:
@@ -27,17 +30,17 @@ if 'current_page' not in st.session_state:
     st.session_state.current_page = 0
 if 'chapters' not in st.session_state:
     st.session_state.chapters = ["ALL"]
-# 💡 속도 향상의 핵심: 렌더링된 이미지 기억하기
+# 속도 향상용 캐시
 if 'rendered_page_num' not in st.session_state:
     st.session_state.rendered_page_num = -1
 if 'rendered_image' not in st.session_state:
     st.session_state.rendered_image = None
 
 # ==========================================
-# 1. 사이드바 (좌측 패널): 외부 파일 열기
+# 좌측 패널 (사이드바): 파일 업로드 전용으로 심플하게 유지
 # ==========================================
 with st.sidebar:
-    st.header("📂 외부파일 열기 (OPEN FILE)")
+    st.header("📂 외부파일 열기")
     uploaded_file = st.file_uploader("PDF 매뉴얼 업로드", type=['pdf', 'docx', 'xlsx'])
     
     if uploaded_file is not None and st.session_state.doc is None:
@@ -74,32 +77,24 @@ with st.sidebar:
             
         st.session_state.toc_items = parsed_toc
         st.session_state.chapters = ["ALL"] + sorted(list(chapters))
-        
-    # 사이드바 목차 (요약 버전)
-    if st.session_state.doc:
-        st.markdown("---")
-        st.subheader("📑 목차 (TOC 요약)")
-        for item in st.session_state.toc_items:
-            if item['level'] <= 2: # 너무 길어지지 않게 상위 레벨만 표시
-                indent = "&nbsp;" * (item['level'] * 4)
-                st.markdown(f"{indent} {item['title']}")
 
 # ==========================================
-# 2. 메인 화면 분할 (검색 탭 / 뷰어)
+# 메인 화면 분할 (검색 탭 / 뷰어)
 # ==========================================
 if st.session_state.doc:
     col_search, col_viewer = st.columns([4, 6])
     
     with col_search:
-        tab1, tab2, tab3, tab4 = st.tabs(["🔍 MEL Entries", "🔍 MEL Items", "🔍 Operational Proc.", "📁 기타"])
+        # 2. 기타 탭을 '기타 (목차)'로 변경
+        tab1, tab2, tab3, tab4 = st.tabs(["🔍 MEL Entries", "🔍 MEL Items", "🔍 Operational Proc.", "📁 기타 (목차)"])
         
         # --- 탭 1: MEL Entries ---
         with tab1:
-            sub_col1, sub_col2 = st.columns([1, 3])
+            sub_col1, sub_col2 = st.columns([1, 2])
             with sub_col1:
-                selected_chapter = st.selectbox("Chapter", st.session_state.chapters, key="ch_sel")
+                selected_chapter = st.selectbox("Chapter 선택", st.session_state.chapters, key="ch_sel")
             with sub_col2:
-                search_text_1 = st.text_input("검색어 입력", key="search1")
+                search_text_1 = st.text_input("결과 내 검색", key="search1")
                 
             filtered_entries = [
                 item for item in st.session_state.toc_items 
@@ -108,9 +103,17 @@ if st.session_state.doc:
                 and (search_text_1.lower() in item['title'].lower())
             ]
             
-            # 💡 PC버전처럼 콤보박스(Selectbox)로 변경하여 속도 쾌적화 & 공간 절약
             entry_titles = [f"{item['title']} (p.{item['page']+1})" for item in filtered_entries]
-            selected_entry = st.selectbox("🎯 검색 결과 목록 (클릭하여 이동):", ["대기 중..."] + entry_titles, key="combo1")
+            
+            # 3. 특정 챕터 선택 시, 하위 목록이 아래로 펼쳐지는 구조 (PC 뷰어 느낌 구현)
+            if selected_chapter != "ALL":
+                st.write(f"📂 **Chapter {selected_chapter} 하위 항목**")
+                # 리스트 형태로 길게 펼쳐서 보여줌 (스크롤 컨테이너 적용)
+                with st.container(height=350):
+                    selected_entry = st.radio("목록", ["대기 중..."] + entry_titles, label_visibility="collapsed", key="radio1")
+            else:
+                # ALL일 때는 리스트가 너무 길어지므로 콤보박스로 유지
+                selected_entry = st.selectbox("🎯 전체 검색 결과", ["대기 중..."] + entry_titles, key="combo1")
             
             if selected_entry != "대기 중...":
                 idx = entry_titles.index(selected_entry)
@@ -123,7 +126,6 @@ if st.session_state.doc:
                 item for item in st.session_state.toc_items 
                 if item['is_items'] and (search_text_2.lower() in item['title'].lower())
             ]
-            
             item_titles = [f"{item['title']} (p.{item['page']+1})" for item in filtered_items]
             selected_item = st.selectbox("🎯 검색 결과 목록:", ["대기 중..."] + item_titles, key="combo2")
             
@@ -138,7 +140,6 @@ if st.session_state.doc:
                 item for item in st.session_state.toc_items 
                 if item['is_ops'] and (search_text_3.lower() in item['title'].lower())
             ]
-            
             ops_titles = [f"{item['title']} (p.{item['page']+1})" for item in filtered_ops]
             selected_op = st.selectbox("🎯 검색 결과 목록:", ["대기 중..."] + ops_titles, key="combo3")
             
@@ -146,8 +147,17 @@ if st.session_state.doc:
                 idx = ops_titles.index(selected_op)
                 st.session_state.current_page = filtered_ops[idx]['page']
                     
+        # --- 탭 4: 기타 (목차) ---
         with tab4:
-            st.write("추후 외부 문서(Word, Excel 등) 업데이트 공간")
+            st.subheader("📑 문서 전체 목차 (Table of Contents)")
+            # 2. 사이드바에 있던 목차를 이곳으로 이동, 스크롤 박스로 깔끔하게 처리
+            with st.container(height=400):
+                for item in st.session_state.toc_items:
+                    if item['level'] <= 3: # 너무 깊은 항목은 숨김
+                        indent = "&nbsp;" * (item['level'] * 4)
+                        # 아이콘 추가로 트리 느낌 강조
+                        icon = "📄" if item['level'] == 3 else "📂"
+                        st.markdown(f"{indent} {icon} {item['title']} (p.{item['page']+1})")
 
     with col_viewer:
         nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
@@ -162,7 +172,6 @@ if st.session_state.doc:
                 if st.session_state.current_page < len(st.session_state.doc) - 1:
                     st.session_state.current_page += 1
 
-        # 💡 속도 향상의 핵심: 페이지가 안 바뀌었으면 예전 이미지를 그대로 씀 (글자 칠 때마다 버벅임 방지)
         if st.session_state.rendered_page_num != st.session_state.current_page:
             page = st.session_state.doc.load_page(st.session_state.current_page)
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
@@ -171,4 +180,4 @@ if st.session_state.doc:
         
         st.image(st.session_state.rendered_image, use_container_width=True)
 else:
-    st.info("👈 좌측 사이드바의 [Browse files] 버튼을 눌러 PDF 파일을 업로드해 주세요.")
+    st.info("👈 좌측 상단 [>] 버튼을 눌러 PDF 파일을 업로드해 주세요.")
