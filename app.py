@@ -68,11 +68,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("✈️ MEL SEARCH")
+# 헤더 명칭 원상 복구 및 직관성 향상
+st.title("✈️ MEL SEARCH (Cockpit & E/E)")
 
 # --- 세션 상태 ---
 if 'doc' not in st.session_state: st.session_state.doc = None
 if 'toc_items' not in st.session_state: st.session_state.toc_items = []
+if 'full_tree' not in st.session_state: st.session_state.full_tree = []
 if 'current_page' not in st.session_state: st.session_state.current_page = 0
 if 'chapters' not in st.session_state: st.session_state.chapters = []
 if 'rendered_page' not in st.session_state: st.session_state.rendered_page = -1
@@ -80,8 +82,28 @@ if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
 
 def clean(t): return str(t).replace("-", "").replace(" ", "").lower()
 
+# 목차 데이터를 트리(Tree) 구조로 변환하는 함수
+def build_tree(toc_list):
+    tree = []
+    path = {}
+    for item in toc_list:
+        lvl, title, page = item[0], item[1].strip(), item[2] - 1
+        node = {'title': title, 'page': page, 'children': []}
+        
+        # 하위 레벨이 점프되는 경우를 대비한 부모 레벨 탐색
+        parent_lvl = lvl - 1
+        while parent_lvl > 0 and parent_lvl not in path:
+            parent_lvl -= 1
+            
+        if parent_lvl > 0 and parent_lvl in path:
+            path[parent_lvl]['children'].append(node)
+        else:
+            tree.append(node)
+        path[lvl] = node
+    return tree
+
 # ==========================================
-# 1. 사이드바: 업로드 및 검색 (목차 삭제, 탭 이전)
+# 1. 사이드바: 업로드 및 검색 (목차 탭 추가)
 # ==========================================
 with st.sidebar:
     st.header("📂 파일 업로드")
@@ -90,6 +112,10 @@ with st.sidebar:
     if uploaded_file and st.session_state.doc is None:
         st.session_state.doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
         toc = st.session_state.doc.get_toc()
+        
+        # 전체 트리 데이터 생성
+        st.session_state.full_tree = build_tree(toc)
+        
         parsed_toc = []
         path = {}
         chapters = []
@@ -117,11 +143,28 @@ with st.sidebar:
         st.session_state.chapters = chapters
         st.rerun()
 
-    # 파일이 업로드되면 사이드바에 검색 탭 표시
+    # 파일이 업로드되면 사이드바에 검색 탭 표시 (목차 탭 신규 추가)
     if st.session_state.doc:
         st.markdown("---")
-        t1, t2, t3 = st.tabs(["Entries", "Items", "Oper. Proc."])
+        t_tree, t1, t2, t3 = st.tabs(["전체 목차", "Entries", "Items", "Oper. Proc."])
         
+        # --- 전체 목차 (Tree View) ---
+        with t_tree:
+            def display_tree(nodes, prefix=""):
+                for idx, node in enumerate(nodes):
+                    if node['children']:
+                        # 하위 목차가 있는 경우 Expander 생성
+                        with st.expander(f"📁 {node['title']}", expanded=False):
+                            display_tree(node['children'], f"{prefix}_{idx}")
+                    else:
+                        # 하위 목차가 없는 최종 항목인 경우 이동 버튼 생성
+                        if st.button(f"📄 {node['title']}", key=f"tree_btn_{prefix}_{idx}_{node['page']}"):
+                            st.session_state.current_page = node['page']
+                            st.rerun()
+                            
+            with st.container(height=500):
+                display_tree(st.session_state.full_tree)
+
         # --- MEL Entries ---
         with t1:
             sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
@@ -170,18 +213,18 @@ with st.sidebar:
 # 2. 메인 화면: 100% 뷰어 전용
 # ==========================================
 if st.session_state.doc:
-    # [상단] 네비게이션
+    # [상단] 네비게이션 (도형 버튼 및 비율 조정)
     st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
-    nc1_top, nc2_top, nc3_top = st.columns([1, 2, 1])
+    nc1_top, nc2_top, nc3_top = st.columns([1, 6, 1])
     with nc1_top:
-        if st.button("◀ 이전", key="prev_top", use_container_width=True):
+        if st.button("◀", key="prev_top", use_container_width=True):
             if st.session_state.current_page > 0: 
                 st.session_state.current_page -= 1
                 st.rerun()
     with nc2_top:
         st.markdown(f"<div class='page-info'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</div>", unsafe_allow_html=True)
     with nc3_top:
-        if st.button("다음 ▶", key="next_top", use_container_width=True):
+        if st.button("▶", key="next_top", use_container_width=True):
             if st.session_state.current_page < len(st.session_state.doc)-1: 
                 st.session_state.current_page += 1
                 st.rerun()
@@ -194,18 +237,18 @@ if st.session_state.doc:
         st.session_state.rendered_page = st.session_state.current_page
     st.image(st.session_state.rendered_img, use_container_width=True)
 
-    # [하단] 네비게이션
+    # [하단] 네비게이션 (도형 버튼 및 비율 조정)
     st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
-    nc1_bot, nc2_bot, nc3_bot = st.columns([1, 2, 1])
+    nc1_bot, nc2_bot, nc3_bot = st.columns([1, 6, 1])
     with nc1_bot:
-        if st.button("◀ 이전", key="prev_bot", use_container_width=True):
+        if st.button("◀", key="prev_bot", use_container_width=True):
             if st.session_state.current_page > 0: 
                 st.session_state.current_page -= 1
                 st.rerun()
     with nc2_bot:
         st.markdown(f"<div class='page-info'>PAGE: {st.session_state.current_page+1} / {len(st.session_state.doc)}</div>", unsafe_allow_html=True)
     with nc3_bot:
-        if st.button("다음 ▶", key="next_bot", use_container_width=True):
+        if st.button("▶", key="next_bot", use_container_width=True):
             if st.session_state.current_page < len(st.session_state.doc)-1: 
                 st.session_state.current_page += 1
                 st.rerun()
