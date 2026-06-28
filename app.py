@@ -3,6 +3,7 @@ import fitz  # PyMuPDF
 from PIL import Image
 import re
 import streamlit_antd_components as sac
+import os
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide", initial_sidebar_state="expanded")
@@ -73,6 +74,7 @@ st.title("✈️ MEL SEARCH (Cockpit & E/E)")
 
 # --- 세션 상태 ---
 if 'doc' not in st.session_state: st.session_state.doc = None
+if 'pdf_name' not in st.session_state: st.session_state.pdf_name = "🗂️ 목차" # 기본 탭 이름
 if 'toc_items' not in st.session_state: st.session_state.toc_items = []
 if 'sac_tree_data' not in st.session_state: st.session_state.sac_tree_data = []
 if 'current_page' not in st.session_state: st.session_state.current_page = 0
@@ -107,24 +109,30 @@ with st.sidebar:
     uploaded_file = st.file_uploader("PDF 매뉴얼 업로드", type=['pdf'])
     
     if uploaded_file and st.session_state.doc is None:
+        # 파일명을 추출하여 탭 이름으로 저장 (확장자 제거)
+        st.session_state.pdf_name = os.path.splitext(uploaded_file.name)[0]
         st.session_state.doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
         toc = st.session_state.doc.get_toc()
         st.session_state.sac_tree_data = build_sac_tree(toc)
         
         parsed_toc = []
-        path = {}
+        path_dict = {}
         chapters = []
         cur_ch = ""
         
         for item in toc:
             level, title, p_num = item[0], item[1].strip(), item[2] - 1
-            path[level] = title
-            for k in list(path.keys()):
-                if k > level: del path[k]
             
-            is_ent = any("mel entries" in path[l].lower() for l in path)
-            is_itm = any("mel items" in path[l].lower() for l in path)
-            is_ops = any("mel operational procedures" in path[l].lower() for l in path)
+            # 동적 콤보박스를 위한 트리 계층(Path) 추적 로직
+            path_dict[level] = title
+            for k in list(path_dict.keys()):
+                if k > level: del path_dict[k]
+            current_path = [path_dict[i] for i in sorted(path_dict.keys())]
+            
+            # 기존 탭(t1, t2, t3)을 위한 레거시 로직 유지
+            is_ent = any("mel entries" in p.lower() for p in current_path)
+            is_itm = any("mel items" in p.lower() for p in current_path)
+            is_ops = any("mel operational procedures" in p.lower() for p in current_path)
             
             if is_ent and re.match(r'^\d{2}\b', title):
                 cur_ch = title
@@ -132,7 +140,8 @@ with st.sidebar:
             
             parsed_toc.append({
                 'level': level, 'title': title, 'page': p_num,
-                'is_ent': is_ent, 'is_itm': is_itm, 'is_ops': is_ops, 'chapter': cur_ch
+                'is_ent': is_ent, 'is_itm': is_itm, 'is_ops': is_ops, 'chapter': cur_ch,
+                'path': current_path # 트리 구조 필터링을 위한 속성 추가
             })
         st.session_state.toc_items = parsed_toc
         st.session_state.chapters = chapters
@@ -140,8 +149,8 @@ with st.sidebar:
 
     if st.session_state.doc:
         st.markdown("---")
-        # 기존 4개 탭 유지 + "상세 검색" 탭 신규 추가 (총 5개 탭)
-        t_tree, t_adv, t1, t2, t3 = st.tabs(["🗂️ 목차", "🔍 상세", "Entries", "Items", "Oper."])
+        # 1번 탭 이름은 파일명, 2번 탭은 Search로 변경
+        t_tree, t_adv, t1, t2, t3 = st.tabs([f"🗂️ {st.session_state.pdf_name}", "🔍 Search", "Entries", "Items", "Oper."])
         
         # --- 1. 전체 목차 (Tree View) ---
         with t_tree:
@@ -156,18 +165,35 @@ with st.sidebar:
                         st.session_state.current_page = target_page
                         st.rerun()
 
-        # --- 2. 신규 기능: 상세 조건 검색 (Acrobat Style) ---
+        # --- 2. 콤보 박스 트리 검색 (새로운 Search 기능) ---
         with t_adv:
             st.markdown("##### 🎯 검색 범위 지정")
-            scope = st.radio(
-                "검색 영역",
-                ["전체 매뉴얼", "MEL Entries", "MEL Items", "Oper. Proc."],
-                horizontal=False, label_visibility="collapsed"
-            )
             
-            selected_ch = "전체 Chapter"
-            if scope == "MEL Entries":
-                selected_ch = st.selectbox("👉 세부 Chapter", ["전체 Chapter"] + st.session_state.chapters)
+            # 1단계 범위 (대분류)
+            level_1_options = ["전체 매뉴얼"] + list(dict.fromkeys([item['path'][0] for item in st.session_state.toc_items if len(item['path']) > 0]))
+            scope_1 = st.selectbox("1차 분류", level_1_options, key="scope_1")
+            
+            selected_path = []
+            if scope_1 != "전체 매뉴얼":
+                selected_path.append(scope_1)
+                
+                # 2단계 범위 (중분류 - 1차 분류 선택 시에만 나타남)
+                level_2_items = [item['path'][1] for item in st.session_state.toc_items if len(item['path']) > 1 and item['path'][0] == scope_1]
+                level_2_options = ["전체"] + list(dict.fromkeys(level_2_items))
+                
+                if len(level_2_options) > 1:
+                    scope_2 = st.selectbox("👉 2차 세부 분류", level_2_options, key="scope_2")
+                    if scope_2 != "전체":
+                        selected_path.append(scope_2)
+                        
+                        # 3단계 범위 (소분류 - 2차 분류 선택 시에만 나타남)
+                        level_3_items = [item['path'][2] for item in st.session_state.toc_items if len(item['path']) > 2 and item['path'][0] == scope_1 and item['path'][1] == scope_2]
+                        level_3_options = ["전체"] + list(dict.fromkeys(level_3_items))
+                        
+                        if len(level_3_options) > 1:
+                            scope_3 = st.selectbox("👉 3차 세부 항목", level_3_options, key="scope_3")
+                            if scope_3 != "전체":
+                                selected_path.append(scope_3)
             
             st.markdown("##### 🔑 키워드 입력")
             adv_keyword = st.text_input("검색어", key="adv_search", placeholder="예: APU, FIRE...")
@@ -175,16 +201,15 @@ with st.sidebar:
             if adv_keyword and clean(adv_keyword):
                 results = []
                 for item in st.session_state.toc_items:
-                    match_scope = False
-                    if scope == "전체 매뉴얼": match_scope = True
-                    elif scope == "MEL Entries" and item['is_ent']:
-                        if selected_ch == "전체 Chapter" or item['chapter'] == selected_ch: match_scope = True
-                    elif scope == "MEL Items" and item['is_itm']: match_scope = True
-                    elif scope == "Oper. Proc." and item['is_ops']: match_scope = True
+                    # 선택된 경로(selected_path) 구조와 일치하는지 확인
+                    match_scope = True
+                    for i, p in enumerate(selected_path):
+                        if len(item['path']) <= i or item['path'][i] != p:
+                            match_scope = False
+                            break
                     
+                    # 범위 내에 속하고 키워드가 일치하면 결과 추가
                     if match_scope and clean(adv_keyword) in clean(item['title']):
-                        if scope == "MEL Entries" and selected_ch != "전체 Chapter" and item['title'] == selected_ch:
-                            continue
                         results.append(item)
                 
                 st.markdown(f"<span style='color:#00D2FF; font-size:0.8rem;'>{len(results)}건의 결과가 발견되었습니다.</span>", unsafe_allow_html=True)
