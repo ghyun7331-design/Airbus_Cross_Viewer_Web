@@ -9,7 +9,7 @@ st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide", i
 
 st.markdown("""
 <style>
-    /* 💡 사이드바 열기 버튼(>) 공간 확보를 위해 상단 여백(3rem) 유지, 나머지 여백 최소화 */
+    /* 사이드바 여백 최소화 */
     .block-container {
         padding-top: 3rem !important;
         padding-bottom: 1rem !important;
@@ -22,7 +22,7 @@ st.markdown("""
     
     /* 사이드바 탭 디자인 */
     .stTabs [data-baseweb="tab-list"] { background-color: #24344D; }
-    .stTabs [data-baseweb="tab"] { color: #E2E8F0; font-size: 0.9rem; }
+    .stTabs [data-baseweb="tab"] { color: #E2E8F0; font-size: 0.85rem; padding: 10px 5px !important; }
     .stTabs [aria-selected="true"] { color: #00D2FF !important; border-bottom: 2px solid #00D2FF !important; }
     
     /* 검색 결과 리스트 디자인 */
@@ -34,11 +34,13 @@ st.markdown("""
         justify-content: flex-start !important;
         padding: 6px 10px !important;
         width: 100% !important;
-        margin-bottom: 2px !important;
+        margin-bottom: 3px !important;
+        border-radius: 6px !important;
     }
     .list-item-btn div[data-testid="stButton"] > button:hover {
         border-color: #00D2FF !important;
         color: #00D2FF !important;
+        background-color: #1E2D40 !important;
     }
 
     /* 네비게이션 버튼 1줄 강제 고정 */
@@ -54,7 +56,7 @@ st.markdown("""
         flex: 1 1 0% !important;
     }
     
-    /* 페이지 텍스트 자동 크기 조정 (줄바꿈 방지) */
+    /* 페이지 텍스트 자동 크기 조정 */
     .page-info {
         font-size: clamp(0.7rem, 3.5vw, 1.2rem) !important;
         font-weight: bold;
@@ -67,7 +69,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 헤더 명칭 직관성 향상
 st.title("✈️ MEL SEARCH (Cockpit & E/E)")
 
 # --- 세션 상태 ---
@@ -81,36 +82,25 @@ if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
 
 def clean(t): return str(t).replace("-", "").replace(" ", "").lower()
 
-# 목차 데이터를 sac.TreeItem 구조로 변환하는 재귀 함수
+# 목차 데이터를 sac.TreeItem 구조로 변환
 def build_sac_tree(toc_list):
     tree_items = []
     path = {}
-    
     for item in toc_list:
         lvl, title, page = item[0], item[1].strip(), item[2] - 1
-        
-        # tag 속성에 페이지 번호를 저장하여 클릭 시 식별 가능하게 함
         node = sac.TreeItem(title, tag=str(page))
-        
         parent_lvl = lvl - 1
-        while parent_lvl > 0 and parent_lvl not in path:
-            parent_lvl -= 1
-            
+        while parent_lvl > 0 and parent_lvl not in path: parent_lvl -= 1
         if parent_lvl > 0 and parent_lvl in path:
-            # 부모가 있다면 부모의 children에 추가
-            if path[parent_lvl].children is None:
-                path[parent_lvl].children = []
+            if path[parent_lvl].children is None: path[parent_lvl].children = []
             path[parent_lvl].children.append(node)
         else:
-            # 최상위 레벨인 경우
             tree_items.append(node)
-            
         path[lvl] = node
-        
     return tree_items
 
 # ==========================================
-# 1. 사이드바: 업로드 및 검색 (sac.tree 적용)
+# 1. 사이드바: 업로드 및 기존 기능 + 신규 기능
 # ==========================================
 with st.sidebar:
     st.header("📂 파일 업로드")
@@ -119,8 +109,6 @@ with st.sidebar:
     if uploaded_file and st.session_state.doc is None:
         st.session_state.doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
         toc = st.session_state.doc.get_toc()
-        
-        # sac 용 트리 데이터 생성
         st.session_state.sac_tree_data = build_sac_tree(toc)
         
         parsed_toc = []
@@ -152,39 +140,71 @@ with st.sidebar:
 
     if st.session_state.doc:
         st.markdown("---")
-        t_tree, t1, t2, t3 = st.tabs(["전체 목차", "Entries", "Items", "Oper. Proc."])
+        # 기존 4개 탭 유지 + "상세 검색" 탭 신규 추가 (총 5개 탭)
+        t_tree, t_adv, t1, t2, t3 = st.tabs(["🗂️ 목차", "🔍 상세", "Entries", "Items", "Oper."])
         
-        # --- 전체 목차 (sac.tree 적용) ---
+        # --- 1. 전체 목차 (Tree View) ---
         with t_tree:
-            with st.container(height=500):
-                # 반환값이 리스트 형태로 옴 (선택된 항목의 title)
+            with st.container(height=550):
                 selected_node = sac.tree(
                     items=st.session_state.sac_tree_data,
-                    index=0,
-                    align='left',
-                    size='sm',
-                    icon='journal-text', # 기본 아이콘 설정
-                    open_all=False,
-                    return_index=False # title 값을 반환받음
+                    index=0, align='left', size='sm', icon='journal-text', open_all=False, return_index=False
                 )
-                
-                # 선택된 노드가 있을 경우, 해당 노드의 tag(페이지 번호)를 찾아 이동
                 if selected_node:
-                    # 선택된 타이틀을 기반으로 전체 toc에서 페이지 번호를 찾음
                     target_page = next((item['page'] for item in st.session_state.toc_items if item['title'] == selected_node[0]), None)
                     if target_page is not None and st.session_state.current_page != target_page:
                         st.session_state.current_page = target_page
                         st.rerun()
 
-        # --- MEL Entries ---
-        with t1:
-            sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel")
-            s1 = st.text_input("결과 내 검색", key="s1")
+        # --- 2. 신규 기능: 상세 조건 검색 (Acrobat Style) ---
+        with t_adv:
+            st.markdown("##### 🎯 검색 범위 지정")
+            scope = st.radio(
+                "검색 영역",
+                ["전체 매뉴얼", "MEL Entries", "MEL Items", "Oper. Proc."],
+                horizontal=False, label_visibility="collapsed"
+            )
             
+            selected_ch = "전체 Chapter"
+            if scope == "MEL Entries":
+                selected_ch = st.selectbox("👉 세부 Chapter", ["전체 Chapter"] + st.session_state.chapters)
+            
+            st.markdown("##### 🔑 키워드 입력")
+            adv_keyword = st.text_input("검색어", key="adv_search", placeholder="예: APU, FIRE...")
+            
+            if adv_keyword and clean(adv_keyword):
+                results = []
+                for item in st.session_state.toc_items:
+                    match_scope = False
+                    if scope == "전체 매뉴얼": match_scope = True
+                    elif scope == "MEL Entries" and item['is_ent']:
+                        if selected_ch == "전체 Chapter" or item['chapter'] == selected_ch: match_scope = True
+                    elif scope == "MEL Items" and item['is_itm']: match_scope = True
+                    elif scope == "Oper. Proc." and item['is_ops']: match_scope = True
+                    
+                    if match_scope and clean(adv_keyword) in clean(item['title']):
+                        if scope == "MEL Entries" and selected_ch != "전체 Chapter" and item['title'] == selected_ch:
+                            continue
+                        results.append(item)
+                
+                st.markdown(f"<span style='color:#00D2FF; font-size:0.8rem;'>{len(results)}건의 결과가 발견되었습니다.</span>", unsafe_allow_html=True)
+                
+                if results:
+                    st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
+                    with st.container(height=300):
+                        for idx, res in enumerate(results):
+                            if st.button(f"📄 {res['title']}", key=f"adv_{idx}_{res['page']}"):
+                                st.session_state.current_page = res['page']
+                                st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+        # --- 3. 기존 기능: MEL Entries ---
+        with t1:
+            sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel_old")
+            s1 = st.text_input("결과 내 검색", key="s1")
             if sel_ch != "선택하세요":
                 ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == sel_ch and i['title'] != sel_ch]
-                if clean(s1):
-                    ents = [i for i in ents if clean(s1) in clean(i['title'])]
+                if clean(s1): ents = [i for i in ents if clean(s1) in clean(i['title'])]
                 
                 st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
                 with st.container(height=400):
@@ -194,7 +214,7 @@ with st.sidebar:
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- MEL Items ---
+        # --- 4. 기존 기능: MEL Items ---
         with t2:
             s2 = st.text_input("MEL Items 검색", key="s2")
             if clean(s2):
@@ -207,7 +227,7 @@ with st.sidebar:
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- Operational Proc ---
+        # --- 5. 기존 기능: Operational Proc ---
         with t3:
             s3 = st.text_input("Oper. Proc. 검색", key="s3")
             if clean(s3):
