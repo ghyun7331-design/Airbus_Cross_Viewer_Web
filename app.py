@@ -2,6 +2,7 @@ import streamlit as st
 import fitz  # PyMuPDF
 from PIL import Image
 import re
+import streamlit_antd_components as sac
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="MEL SEARCH", page_icon="✈️", layout="wide", initial_sidebar_state="expanded")
@@ -17,8 +18,6 @@ st.markdown("""
         max-width: 100% !important;
     }
     
-    /* ⚠️ 사이드바 버튼을 숨기는 악성 코드(header display:none) 완전 삭제 완료! */
-
     .stApp { background-color: #1A2639; color: #E2E8F0; }
     
     /* 사이드바 탭 디자인 */
@@ -68,13 +67,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 헤더 명칭 원상 복구 및 직관성 향상
+# 헤더 명칭 직관성 향상
 st.title("✈️ MEL SEARCH (Cockpit & E/E)")
 
 # --- 세션 상태 ---
 if 'doc' not in st.session_state: st.session_state.doc = None
 if 'toc_items' not in st.session_state: st.session_state.toc_items = []
-if 'full_tree' not in st.session_state: st.session_state.full_tree = []
+if 'sac_tree_data' not in st.session_state: st.session_state.sac_tree_data = []
 if 'current_page' not in st.session_state: st.session_state.current_page = 0
 if 'chapters' not in st.session_state: st.session_state.chapters = []
 if 'rendered_page' not in st.session_state: st.session_state.rendered_page = -1
@@ -82,28 +81,36 @@ if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
 
 def clean(t): return str(t).replace("-", "").replace(" ", "").lower()
 
-# 목차 데이터를 트리(Tree) 구조로 변환하는 함수
-def build_tree(toc_list):
-    tree = []
+# 목차 데이터를 sac.TreeItem 구조로 변환하는 재귀 함수
+def build_sac_tree(toc_list):
+    tree_items = []
     path = {}
+    
     for item in toc_list:
         lvl, title, page = item[0], item[1].strip(), item[2] - 1
-        node = {'title': title, 'page': page, 'children': []}
         
-        # 하위 레벨이 점프되는 경우를 대비한 부모 레벨 탐색
+        # tag 속성에 페이지 번호를 저장하여 클릭 시 식별 가능하게 함
+        node = sac.TreeItem(title, tag=str(page))
+        
         parent_lvl = lvl - 1
         while parent_lvl > 0 and parent_lvl not in path:
             parent_lvl -= 1
             
         if parent_lvl > 0 and parent_lvl in path:
-            path[parent_lvl]['children'].append(node)
+            # 부모가 있다면 부모의 children에 추가
+            if path[parent_lvl].children is None:
+                path[parent_lvl].children = []
+            path[parent_lvl].children.append(node)
         else:
-            tree.append(node)
+            # 최상위 레벨인 경우
+            tree_items.append(node)
+            
         path[lvl] = node
-    return tree
+        
+    return tree_items
 
 # ==========================================
-# 1. 사이드바: 업로드 및 검색 (목차 탭 추가)
+# 1. 사이드바: 업로드 및 검색 (sac.tree 적용)
 # ==========================================
 with st.sidebar:
     st.header("📂 파일 업로드")
@@ -113,8 +120,8 @@ with st.sidebar:
         st.session_state.doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
         toc = st.session_state.doc.get_toc()
         
-        # 전체 트리 데이터 생성
-        st.session_state.full_tree = build_tree(toc)
+        # sac 용 트리 데이터 생성
+        st.session_state.sac_tree_data = build_sac_tree(toc)
         
         parsed_toc = []
         path = {}
@@ -143,27 +150,31 @@ with st.sidebar:
         st.session_state.chapters = chapters
         st.rerun()
 
-    # 파일이 업로드되면 사이드바에 검색 탭 표시 (목차 탭 신규 추가)
     if st.session_state.doc:
         st.markdown("---")
         t_tree, t1, t2, t3 = st.tabs(["전체 목차", "Entries", "Items", "Oper. Proc."])
         
-        # --- 전체 목차 (Tree View) ---
+        # --- 전체 목차 (sac.tree 적용) ---
         with t_tree:
-            def display_tree(nodes, prefix=""):
-                for idx, node in enumerate(nodes):
-                    if node['children']:
-                        # 하위 목차가 있는 경우 Expander 생성
-                        with st.expander(f"📁 {node['title']}", expanded=False):
-                            display_tree(node['children'], f"{prefix}_{idx}")
-                    else:
-                        # 하위 목차가 없는 최종 항목인 경우 이동 버튼 생성
-                        if st.button(f"📄 {node['title']}", key=f"tree_btn_{prefix}_{idx}_{node['page']}"):
-                            st.session_state.current_page = node['page']
-                            st.rerun()
-                            
             with st.container(height=500):
-                display_tree(st.session_state.full_tree)
+                # 반환값이 리스트 형태로 옴 (선택된 항목의 title)
+                selected_node = sac.tree(
+                    items=st.session_state.sac_tree_data,
+                    index=0,
+                    align='left',
+                    size='sm',
+                    icon='journal-text', # 기본 아이콘 설정
+                    open_all=False,
+                    return_index=False # title 값을 반환받음
+                )
+                
+                # 선택된 노드가 있을 경우, 해당 노드의 tag(페이지 번호)를 찾아 이동
+                if selected_node:
+                    # 선택된 타이틀을 기반으로 전체 toc에서 페이지 번호를 찾음
+                    target_page = next((item['page'] for item in st.session_state.toc_items if item['title'] == selected_node[0]), None)
+                    if target_page is not None and st.session_state.current_page != target_page:
+                        st.session_state.current_page = target_page
+                        st.rerun()
 
         # --- MEL Entries ---
         with t1:
@@ -213,7 +224,7 @@ with st.sidebar:
 # 2. 메인 화면: 100% 뷰어 전용
 # ==========================================
 if st.session_state.doc:
-    # [상단] 네비게이션 (도형 버튼 및 비율 조정)
+    # [상단] 네비게이션
     st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
     nc1_top, nc2_top, nc3_top = st.columns([1, 6, 1])
     with nc1_top:
@@ -229,7 +240,7 @@ if st.session_state.doc:
                 st.session_state.current_page += 1
                 st.rerun()
 
-    # PDF 이미지 렌더링 (화면 꽉 차게)
+    # PDF 이미지 렌더링
     if st.session_state.rendered_page != st.session_state.current_page:
         p = st.session_state.doc.load_page(st.session_state.current_page)
         pix = p.get_pixmap(matrix=fitz.Matrix(2, 2))
@@ -237,7 +248,7 @@ if st.session_state.doc:
         st.session_state.rendered_page = st.session_state.current_page
     st.image(st.session_state.rendered_img, use_container_width=True)
 
-    # [하단] 네비게이션 (도형 버튼 및 비율 조정)
+    # [하단] 네비게이션
     st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
     nc1_bot, nc2_bot, nc3_bot = st.columns([1, 6, 1])
     with nc1_bot:
