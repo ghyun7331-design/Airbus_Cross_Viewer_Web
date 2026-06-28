@@ -1,7 +1,6 @@
 import streamlit as st
 import fitz  # PyMuPDF
 from PIL import Image
-import re
 import streamlit_antd_components as sac
 import os
 
@@ -23,7 +22,7 @@ st.markdown("""
     
     /* 사이드바 탭 디자인 */
     .stTabs [data-baseweb="tab-list"] { background-color: #24344D; }
-    .stTabs [data-baseweb="tab"] { color: #E2E8F0; font-size: 0.85rem; padding: 10px 5px !important; }
+    .stTabs [data-baseweb="tab"] { color: #E2E8F0; font-size: 0.9rem; padding: 10px 15px !important; }
     .stTabs [aria-selected="true"] { color: #00D2FF !important; border-bottom: 2px solid #00D2FF !important; }
     
     /* 검색 결과 리스트 디자인 */
@@ -74,11 +73,11 @@ st.title("✈️ MEL SEARCH (Cockpit & E/E)")
 
 # --- 세션 상태 ---
 if 'doc' not in st.session_state: st.session_state.doc = None
-if 'pdf_name' not in st.session_state: st.session_state.pdf_name = "🗂️ 목차" # 기본 탭 이름
+if 'current_filename' not in st.session_state: st.session_state.current_filename = None
+if 'pdf_name' not in st.session_state: st.session_state.pdf_name = "목차"
 if 'toc_items' not in st.session_state: st.session_state.toc_items = []
 if 'sac_tree_data' not in st.session_state: st.session_state.sac_tree_data = []
 if 'current_page' not in st.session_state: st.session_state.current_page = 0
-if 'chapters' not in st.session_state: st.session_state.chapters = []
 if 'rendered_page' not in st.session_state: st.session_state.rendered_page = -1
 if 'rendered_img' not in st.session_state: st.session_state.rendered_img = None
 
@@ -102,55 +101,64 @@ def build_sac_tree(toc_list):
     return tree_items
 
 # ==========================================
-# 1. 사이드바: 업로드 및 기존 기능 + 신규 기능
+# 1. 사이드바: 다중 업로드 및 콤보박스 선택
 # ==========================================
 with st.sidebar:
     st.header("📂 파일 업로드")
-    uploaded_file = st.file_uploader("PDF 매뉴얼 업로드", type=['pdf'])
+    # 다중 파일 업로드 허용 (accept_multiple_files=True)
+    uploaded_files = st.file_uploader("PDF 매뉴얼 업로드 (여러 개 선택 가능)", type=['pdf'], accept_multiple_files=True)
     
-    if uploaded_file and st.session_state.doc is None:
-        # 파일명을 추출하여 탭 이름으로 저장 (확장자 제거)
-        st.session_state.pdf_name = os.path.splitext(uploaded_file.name)[0]
-        st.session_state.doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-        toc = st.session_state.doc.get_toc()
-        st.session_state.sac_tree_data = build_sac_tree(toc)
+    if uploaded_files:
+        file_dict = {f.name: f for f in uploaded_files}
         
-        parsed_toc = []
-        path_dict = {}
-        chapters = []
-        cur_ch = ""
+        # 파일이 삭제되어 현재 선택된 파일이 리스트에 없는 경우 초기화
+        if st.session_state.current_filename not in file_dict:
+            st.session_state.current_filename = None
+            
+        default_idx = list(file_dict.keys()).index(st.session_state.current_filename) if st.session_state.current_filename else 0
         
-        for item in toc:
-            level, title, p_num = item[0], item[1].strip(), item[2] - 1
+        # 콤보박스로 조회할 PDF 선택
+        selected_filename = st.selectbox("📖 조회할 매뉴얼 선택", list(file_dict.keys()), index=default_idx)
+        
+        # 선택된 PDF가 변경되었을 때만 파싱 (성능 최적화)
+        if selected_filename != st.session_state.current_filename:
+            st.session_state.current_filename = selected_filename
+            st.session_state.pdf_name = os.path.splitext(selected_filename)[0]
             
-            # 동적 콤보박스를 위한 트리 계층(Path) 추적 로직
-            path_dict[level] = title
-            for k in list(path_dict.keys()):
-                if k > level: del path_dict[k]
-            current_path = [path_dict[i] for i in sorted(path_dict.keys())]
+            selected_file = file_dict[selected_filename]
+            selected_file.seek(0) # 스트림 포인터 초기화
+            st.session_state.doc = fitz.open(stream=selected_file.read(), filetype="pdf")
             
-            # 기존 탭(t1, t2, t3)을 위한 레거시 로직 유지
-            is_ent = any("mel entries" in p.lower() for p in current_path)
-            is_itm = any("mel items" in p.lower() for p in current_path)
-            is_ops = any("mel operational procedures" in p.lower() for p in current_path)
+            toc = st.session_state.doc.get_toc()
+            st.session_state.sac_tree_data = build_sac_tree(toc)
             
-            if is_ent and re.match(r'^\d{2}\b', title):
-                cur_ch = title
-                if cur_ch not in chapters: chapters.append(cur_ch)
+            parsed_toc = []
+            path_dict = {}
             
-            parsed_toc.append({
-                'level': level, 'title': title, 'page': p_num,
-                'is_ent': is_ent, 'is_itm': is_itm, 'is_ops': is_ops, 'chapter': cur_ch,
-                'path': current_path # 트리 구조 필터링을 위한 속성 추가
-            })
-        st.session_state.toc_items = parsed_toc
-        st.session_state.chapters = chapters
-        st.rerun()
+            for item in toc:
+                level, title, p_num = item[0], item[1].strip(), item[2] - 1
+                
+                # 동적 콤보박스를 위한 트리 계층(Path) 추적
+                path_dict[level] = title
+                for k in list(path_dict.keys()):
+                    if k > level: del path_dict[k]
+                current_path = [path_dict[i] for i in sorted(path_dict.keys())]
+                
+                parsed_toc.append({
+                    'level': level, 'title': title, 'page': p_num, 'path': current_path
+                })
+                
+            st.session_state.toc_items = parsed_toc
+            st.session_state.current_page = 0
+            st.session_state.rendered_page = -1
+            st.rerun()
 
-    if st.session_state.doc:
+    # 파일이 정상적으로 로드된 경우에만 탭(단 2개) 렌더링
+    if st.session_state.doc and st.session_state.current_filename:
         st.markdown("---")
-        # 1번 탭 이름은 파일명, 2번 탭은 Search로 변경
-        t_tree, t_adv, t1, t2, t3 = st.tabs([f"🗂️ {st.session_state.pdf_name}", "🔍 Search", "Entries", "Items", "Oper."])
+        
+        # 기존 3개 탭 삭제, 파일명 탭과 Search 탭 2개로 압축
+        t_tree, t_adv = st.tabs([f"🗂️ {st.session_state.pdf_name}", "🔍 Search"])
         
         # --- 1. 전체 목차 (Tree View) ---
         with t_tree:
@@ -165,7 +173,7 @@ with st.sidebar:
                         st.session_state.current_page = target_page
                         st.rerun()
 
-        # --- 2. 콤보 박스 트리 검색 (새로운 Search 기능) ---
+        # --- 2. 콤보 박스 트리 검색 (동적 계층형) ---
         with t_adv:
             st.markdown("##### 🎯 검색 범위 지정")
             
@@ -177,7 +185,7 @@ with st.sidebar:
             if scope_1 != "전체 매뉴얼":
                 selected_path.append(scope_1)
                 
-                # 2단계 범위 (중분류 - 1차 분류 선택 시에만 나타남)
+                # 2단계 범위 (중분류)
                 level_2_items = [item['path'][1] for item in st.session_state.toc_items if len(item['path']) > 1 and item['path'][0] == scope_1]
                 level_2_options = ["전체"] + list(dict.fromkeys(level_2_items))
                 
@@ -186,7 +194,7 @@ with st.sidebar:
                     if scope_2 != "전체":
                         selected_path.append(scope_2)
                         
-                        # 3단계 범위 (소분류 - 2차 분류 선택 시에만 나타남)
+                        # 3단계 범위 (소분류)
                         level_3_items = [item['path'][2] for item in st.session_state.toc_items if len(item['path']) > 2 and item['path'][0] == scope_1 and item['path'][1] == scope_2]
                         level_3_options = ["전체"] + list(dict.fromkeys(level_3_items))
                         
@@ -201,14 +209,12 @@ with st.sidebar:
             if adv_keyword and clean(adv_keyword):
                 results = []
                 for item in st.session_state.toc_items:
-                    # 선택된 경로(selected_path) 구조와 일치하는지 확인
                     match_scope = True
                     for i, p in enumerate(selected_path):
                         if len(item['path']) <= i or item['path'][i] != p:
                             match_scope = False
                             break
                     
-                    # 범위 내에 속하고 키워드가 일치하면 결과 추가
                     if match_scope and clean(adv_keyword) in clean(item['title']):
                         results.append(item)
                 
@@ -216,54 +222,12 @@ with st.sidebar:
                 
                 if results:
                     st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-                    with st.container(height=300):
+                    with st.container(height=350):
                         for idx, res in enumerate(results):
                             if st.button(f"📄 {res['title']}", key=f"adv_{idx}_{res['page']}"):
                                 st.session_state.current_page = res['page']
                                 st.rerun()
                     st.markdown('</div>', unsafe_allow_html=True)
-
-        # --- 3. 기존 기능: MEL Entries ---
-        with t1:
-            sel_ch = st.selectbox("Chapter 선택", ["선택하세요"] + st.session_state.chapters, key="ch_sel_old")
-            s1 = st.text_input("결과 내 검색", key="s1")
-            if sel_ch != "선택하세요":
-                ents = [i for i in st.session_state.toc_items if i['is_ent'] and i['chapter'] == sel_ch and i['title'] != sel_ch]
-                if clean(s1): ents = [i for i in ents if clean(s1) in clean(i['title'])]
-                
-                st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-                with st.container(height=400):
-                    for idx, item in enumerate(ents):
-                        if st.button(f"📄 {item['title']}", key=f"btn_ent_{idx}_{item['page']}"):
-                            st.session_state.current_page = item['page']
-                            st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        # --- 4. 기존 기능: MEL Items ---
-        with t2:
-            s2 = st.text_input("MEL Items 검색", key="s2")
-            if clean(s2):
-                itms = [i for i in st.session_state.toc_items if i['is_itm'] and clean(s2) in clean(i['title'])]
-                st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-                with st.container(height=450):
-                    for idx, item in enumerate(itms):
-                        if st.button(f"📄 {item['title']}", key=f"btn_itm_{idx}_{item['page']}"):
-                            st.session_state.current_page = item['page']
-                            st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        # --- 5. 기존 기능: Operational Proc ---
-        with t3:
-            s3 = st.text_input("Oper. Proc. 검색", key="s3")
-            if clean(s3):
-                ops = [i for i in st.session_state.toc_items if i['is_ops'] and clean(s3) in clean(i['title'])]
-                st.markdown('<div class="list-item-btn">', unsafe_allow_html=True)
-                with st.container(height=450):
-                    for idx, item in enumerate(ops):
-                        if st.button(f"📄 {item['title']}", key=f"btn_ops_{idx}_{item['page']}"):
-                            st.session_state.current_page = item['page']
-                            st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================================
 # 2. 메인 화면: 100% 뷰어 전용
@@ -309,4 +273,4 @@ if st.session_state.doc:
                 st.session_state.current_page += 1
                 st.rerun()
 else:
-    st.info("👈 좌측 상단의 화살표(>)를 눌러 사이드바를 열고 PDF 파일을 업로드해 주세요.")
+    st.info("👈 좌측 상단의 화살표(>)를 눌러 사이드바를 열고 여러 개의 PDF 파일을 업로드해 보세요.")
